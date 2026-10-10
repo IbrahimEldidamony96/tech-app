@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="550" fill="none" viewBox="0 0 660 550">
+  <defs>
+    <linearGradient id="metal" x1="200" y1="170" x2="450" y2="400" gradientUnits="userSpaceOnUse"><stop stop-color="#f5fcfb"/><stop offset=".5" stop-color="#a9c8c8"/><stop offset="1" stop-color="#dcecea"/></linearGradient>
+    <linearGradient id="screen" x1="260" y1="190" x2="360" y2="370" gradientUnits="userSpaceOnUse"><stop stop-color="#103b40"/><stop offset="1" stop-color="#247c80"/></linearGradient>
+    <linearGradient id="wave" x1="210" y1="220" x2="420" y2="355" gradientUnits="userSpaceOnUse"><stop stop-color="#99dfd2"/><stop offset="1" stop-color="#3d9e9c"/></linearGradient>
+    <linearGradient id="phone" x1="430" y1="250" x2="500" y2="420" gradientUnits="userSpaceOnUse"><stop stop-color="#274e53"/><stop offset="1" stop-color="#162c32"/></linearGradient>
+    <linearGradient id="ear" x1="135" y1="170" x2="230" y2="335" gradientUnits="userSpaceOnUse"><stop stop-color="#657f83"/><stop offset=".5" stop-color="#354f56"/><stop offset="1" stop-color="#223b43"/></linearGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="16" stdDeviation="12" flood-color="#143f40" flood-opacity=".16"/></filter>
+    <filter id="blur"><feGaussianBlur stdDeviation="12"/></filter>
+  </defs>
+  <ellipse cx="335" cy="439" rx="218" ry="21" fill="#769b9b" opacity=".23" filter="url(#blur)"/>
+  <g transform="rotate(-10 325 300)" filter="url(#shadow)">
+    <rect x="200" y="160" width="302" height="212" rx="12" fill="url(#metal)" stroke="#97b9b9" stroke-width="1.5"/>
+    <rect x="208" y="168" width="286" height="194" rx="6" fill="url(#screen)"/>
+    <path d="M208 310c50-115 115-120 154-32s91 77 132 17v67H208Z" fill="url(#wave)"/>
+    <path d="M208 333c54-72 89-92 143-26s103 41 143 10v45H208Z" fill="#bfefe4" opacity=".62"/>
+    <circle cx="351" cy="163.5" r="1.5" fill="#45666b"/>
+    <path d="m200 371-47 49c-3 4-1 9 5 9h386c7 0 8-5 5-9l-47-49Z" fill="url(#metal)" stroke="#8cabad"/>
+    <path d="m206 377-22 25h333l-22-25Z" fill="#6f969b" opacity=".65"/>
+    <path d="m229 381-4 17m20-17-3 17m20-17-1 17m20-17v17m19-17 1 17m19-17 2 17m18-17 3 17m17-17 4 17m16-17 5 17m15-17 6 17m14-17 7 17m13-17 8 17M203 387h304M195 394h319" stroke="#b2cdcf" stroke-width="2"/>
+    <path d="m302 407-4 12h91l-4-12Z" fill="#c0d8d9" stroke="#a0bfc2"/>
+    <path d="M158 429h386" stroke="#e9f8f5" stroke-width="3"/>
+  </g>
+  <g transform="rotate(14 465 357)" filter="url(#shadow)">
+    <rect x="421" y="237" width="100" height="201" rx="20" fill="#749a9e" stroke="#dbeeea" stroke-width="2"/>
+    <rect x="425" y="241" width="92" height="193" rx="17" fill="url(#phone)"/>
+    <path d="M425 365c24-75 50-83 92-57v108c0 11-6 18-17 18h-58c-10 0-17-7-17-18Z" fill="#67c4bd"/>
+    <path d="M425 401c27-72 60-93 92-34v49c0 11-6 18-17 18h-58c-10 0-17-7-17-18Z" fill="#b8ece0"/>
+    <rect x="452" y="247" width="38" height="10" rx="5" fill="#0b232c"/>
+    <rect x="454" y="423" width="35" height="3" rx="1.5" fill="#24474d"/>
+    <path d="M521 291v25M419 280v17" stroke="#9dbdc1" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <g transform="rotate(-20 170 255)" filter="url(#shadow)">
+    <path d="M113 265v-47a60 60 0 0 1 120 0v47" stroke="#2e4c54" stroke-width="19"/>
+    <path d="M113 232v-14a60 60 0 0 1 120 0v14" stroke="#8aadb0" stroke-width="10"/>
+    <path d="M123 221a50 50 0 0 1 100 0" stroke="#284149" stroke-width="7" stroke-linecap="round"/>
+    <rect x="101" y="239" width="36" height="90" rx="18" fill="url(#ear)" stroke="#78999d"/>
+    <rect x="105" y="248" width="17" height="71" rx="8.5" fill="#2c4d55"/>
+    <rect x="215" y="239" width="36" height="90" rx="18" fill="url(#ear)" stroke="#78999d"/>
+    <rect x="230" y="248" width="17" height="71" rx="8.5" fill="#2c4d55"/>
+    <path d="M133 270v25M219 270v25" stroke="#a4c8c8" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

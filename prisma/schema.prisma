@@ -1,0 +1,967 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  CUSTOMER
+  SUPPORT
+  PRODUCT_MANAGER
+  ORDER_MANAGER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  CARD
+  WALLET
+}
+
+enum ShipmentStatus {
+  PENDING
+  PREPARING
+  SHIPPED
+  IN_TRANSIT
+  DELIVERED
+  RETURNED
+}
+
+enum InventoryMovementType {
+  SALE
+  RESTOCK
+  CANCELLATION
+  RETURN
+  ADMIN_ADJUSTMENT
+}
+
+enum NotificationType {
+  ORDER
+  PAYMENT
+  SHIPMENT
+  STOCK
+  PROMOTION
+  SYSTEM
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  RECEIVED
+  REFUNDED
+}
+
+enum LoyaltyTransactionType {
+  EARN
+  REDEEM
+  REFUND
+  ADJUSTMENT
+  REFERRAL
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  RESTORE
+  LOGIN
+  STATUS_CHANGE
+}
+
+enum BundleDiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+// ==========================================
+// USER
+// ==========================================
+
+model User {
+  id String @id @default(cuid())
+
+  name          String
+  email         String    @unique
+  emailVerified DateTime? // بيتحدد لما اليوزر يأكد إيميله (أو تلقائي عند دخول جوجل)
+  image         String? // صورة البروفايل — بتيجي من جوجل لو دخل بيه
+  password      String? // اختياري: يوزر داخل بجوجل بس مالوش باسورد عندنا خالص
+  role          Role      @default(CUSTOMER)
+  loyaltyPoints Int       @default(0)
+  referralCode  String?   @unique
+  referredById  String?
+  referredBy    User?     @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals     User[]    @relation("UserReferrals")
+
+  accounts Account[] // ربط اليوزر بطرق الدخول المختلفة (جوجل، إلخ)
+  verificationTokens VerificationToken[] // تأكيد الإيميل + استعادة الباسورد
+
+  deletedAt DateTime?
+
+  cart      Cart?
+  wishlist  Wishlist?
+  addresses Address[]
+  orders    Order[]
+  reviews   Review[]
+  notifications Notification[]
+  stockAlerts StockAlert[]
+  recentlyViewed RecentlyViewed[]
+  returnRequests ReturnRequest[]
+  loyaltyTransactions LoyaltyTransaction[]
+  auditLogs AuditLog[] @relation("AuditActor")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([referredById])
+}
+
+// ==========================================
+// ACCOUNT (NextAuth — ربط اليوزر بمزوّد الدخول زي جوجل)
+// ==========================================
+
+model Account {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type              String // "oauth" | "credentials" ...
+  provider          String // "google" | "credentials"
+  providerAccountId String
+
+  refresh_token String?
+  access_token  String?
+  expires_at    Int?
+  token_type    String?
+  scope         String?
+  id_token      String?
+  session_state String?
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// ==========================================
+// VERIFICATION TOKEN (تأكيد الإيميل + استعادة الباسورد)
+// ==========================================
+// توكن واحد بغرضين — مميّزين بـ type. token نفسه هو اللي بيتبعت في
+// رابط الإيميل (hash عشوائي، مش قابل للتخمين)، مش الـ id.
+
+enum VerificationTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model VerificationToken {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  token     String                @unique
+  type      VerificationTokenType
+  expiresAt DateTime
+  usedAt    DateTime? // null = لسه ما اتستخدمش؛ توكن مستخدم قبل كده مايتقبلش تاني
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, type])
+}
+
+// ==========================================
+// RATE LIMIT BUCKET (نافذة ثابتة، مشتركة بين كل الـ instances)
+// ==========================================
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int      @default(1)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// CATEGORY
+// ==========================================
+
+model Category {
+  id String @id @default(cuid())
+
+  nameEn String
+  nameAr String
+  slug   String @unique
+
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryHierarchy")
+
+  products Product[]
+  coupons Coupon[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+}
+
+// ==========================================
+// BRAND
+// ==========================================
+
+model Brand {
+  id String @id @default(cuid())
+
+  name String
+  slug String @unique
+
+  products Product[]
+  coupons Coupon[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// PRODUCT
+// ==========================================
+
+model Product {
+  id String @id @default(cuid())
+
+  nameEn        String
+  nameAr        String
+  slug          String @unique
+  descriptionEn String?
+  descriptionAr String?
+
+  isActive Boolean @default(true)
+  deletedAt DateTime?
+  startingPrice Decimal?
+  averageRating Decimal @default(0)
+  reviewCount Int @default(0)
+
+  metaTitleEn String?
+  metaTitleAr String?
+  metaDescriptionEn String?
+  metaDescriptionAr String?
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  brandId String?
+  brand   Brand? @relation(fields: [brandId], references: [id], onDelete: SetNull)
+
+  images   ProductImage[]
+  options  ProductOption[]
+  variants ProductVariant[]
+
+  wishlistItems WishlistItem[]
+  reviews       Review[]
+  specifications ProductSpecification[]
+  stockAlerts StockAlert[]
+  recentlyViewed RecentlyViewed[]
+  bundleItems BundleItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([isActive, deletedAt])
+  @@index([startingPrice])
+  @@index([averageRating])
+}
+
+// ==========================================
+// PRODUCT IMAGE
+// ==========================================
+
+model ProductImage {
+  id String @id @default(cuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  url String
+  alt String?
+
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+}
+
+// ==========================================
+// PRODUCT OPTION
+// ==========================================
+
+model ProductOption {
+  id String @id @default(cuid())
+
+  nameEn String
+  nameAr String
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  values ProductOptionValue[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, nameEn])
+}
+
+// ==========================================
+// PRODUCT OPTION VALUE
+// ==========================================
+
+model ProductOptionValue {
+  id String @id @default(cuid())
+
+  valueEn String
+  valueAr String
+
+  optionId String
+  option   ProductOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  variantValues VariantOptionValue[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([optionId, valueEn])
+}
+
+// ==========================================
+// PRODUCT VARIANT
+// ==========================================
+
+model ProductVariant {
+  id String @id @default(cuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  sku   String  @unique
+  price Decimal
+  stock Int     @default(0)
+
+  isActive Boolean @default(true)
+  salePrice Decimal?
+  saleStartsAt DateTime?
+  saleEndsAt DateTime?
+
+  optionValues VariantOptionValue[]
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+  inventoryMovements InventoryMovement[]
+  returnItems ReturnItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+}
+
+// ==========================================
+// VARIANT OPTION VALUE
+// ==========================================
+
+model VariantOptionValue {
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  optionValueId String
+  optionValue   ProductOptionValue @relation(fields: [optionValueId], references: [id], onDelete: Cascade)
+
+  @@id([variantId, optionValueId])
+  @@index([optionValueId])
+}
+
+// ==========================================
+// CART
+// ==========================================
+
+model Cart {
+  id String @id @default(cuid())
+
+  userId String @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items CartItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  abandonedReminderSentAt DateTime?
+}
+
+// ==========================================
+// CART ITEM
+// ==========================================
+
+model CartItem {
+  id String @id @default(cuid())
+
+  cartId String
+  cart   Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+
+  quantity Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, variantId])
+  @@index([variantId])
+}
+
+// ==========================================
+// ADDRESS
+// ==========================================
+
+model Address {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  firstName String
+  lastName  String
+  phone     String
+
+  country     String
+  governorate String
+  city        String
+  area        String?
+
+  // Real Bosta IDs resolved once (from GET /cities and GET /zones) at the
+  // moment the customer picks their governorate/area from the Bosta-backed
+  // dropdowns in the checkout form. Cached here so we never have to re-match
+  // a free-text name back to a Bosta id later (fuzzy name matching is lossy —
+  // see resolveBostaCityId/resolveBostaDistrictId in lib/bosta.ts). Nullable
+  // because addresses created before this field existed (or seeded directly)
+  // won't have it; those fall back to the name-based resolver.
+  bostaCityId     String?
+  bostaDistrictId String?
+
+  street     String
+  buildingNo String?
+  apartment  String?
+  postalCode String?
+
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ==========================================
+// WISHLIST
+// ==========================================
+
+model Wishlist {
+  id String @id @default(cuid())
+
+  userId String @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items WishlistItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// WISHLIST ITEM
+// ==========================================
+
+model WishlistItem {
+  id String @id @default(cuid())
+
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([wishlistId, productId])
+  @@index([productId])
+}
+
+// ==========================================
+// COUPON
+// ==========================================
+
+model Coupon {
+  id String @id @default(cuid())
+
+  code String @unique
+
+  type  DiscountType
+  value Decimal
+
+  minOrderAmount Decimal?
+  maxDiscount    Decimal?
+
+  usageLimit        Int?
+  usageLimitPerUser Int @default(1)
+  usedCount         Int @default(0)
+
+  startsAt  DateTime?
+  expiresAt DateTime?
+
+  isActive Boolean @default(true)
+  firstOrderOnly Boolean @default(false)
+  categoryId String?
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brandId String?
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: SetNull)
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([brandId])
+}
+
+// ==========================================
+// ORDER
+// ==========================================
+
+model Order {
+  id String @id @default(cuid())
+
+  userId String?
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestEmail String?
+  guestAccessTokenHash String? @unique
+  checkoutKey String? @unique
+
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  subtotal     Decimal
+  shippingCost Decimal @default(0)
+  discount     Decimal @default(0)
+  total        Decimal
+
+  couponId String?
+  coupon   Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+  // Shipping address snapshot
+
+  shippingFirstName String
+  shippingLastName  String
+  shippingPhone     String
+
+  shippingCountry     String
+  shippingGovernorate String
+  shippingCity        String
+  shippingArea        String?
+
+  // Snapshot of the Bosta city/district id resolved at checkout time (see
+  // Address.bostaCityId/bostaDistrictId) — reused as-is when the admin later
+  // creates the actual Bosta delivery, and used right away to look up the
+  // ShippingRate for this order's shippingCost. Nullable for the same reason
+  // as on Address (older orders / legacy addresses without a cached id).
+  shippingBostaCityId     String?
+  shippingBostaDistrictId String?
+
+  shippingStreet     String
+  shippingBuildingNo String?
+  shippingApartment  String?
+  shippingPostalCode String?
+
+  items    OrderItem[]
+  payment  Payment?
+  shipment Shipment?
+  events OrderEvent[]
+  returnRequests ReturnRequest[]
+
+  customerNote String?
+  loyaltyPointsRedeemed Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([couponId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([guestEmail])
+}
+
+// ==========================================
+// ORDER ITEM
+// ==========================================
+
+model OrderItem {
+  id String @id @default(cuid())
+
+  orderId String
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+
+  quantity Int
+
+  // Historical snapshot
+  productName String
+  sku         String
+  unitPrice   Decimal
+  totalPrice  Decimal
+
+  review Review?
+  returnItems ReturnItem[]
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([variantId])
+}
+
+// ==========================================
+// PAYMENT
+// ==========================================
+
+model Payment {
+  id String @id @default(cuid())
+
+  orderId String @unique
+  order   Order @relation(fields: [orderId], references: [id])
+
+  method PaymentMethod
+  status PaymentStatus @default(PENDING)
+
+  amount Decimal
+
+  transactionId String? @unique
+
+  paidAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// SHIPMENT
+// ==========================================
+
+model Shipment {
+  id String @id @default(cuid())
+
+  orderId String @unique
+  order   Order @relation(fields: [orderId], references: [id])
+
+  status ShipmentStatus @default(PENDING)
+
+  shippingMethod String?
+  trackingNumber String? @unique
+  carrier        String?
+    bostaDeliveryId String? @unique
+  bostaRawState   String?
+
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// SHIPPING RATE
+// ==========================================
+// Bosta doesn't expose a public real-time "calculate delivery fee" endpoint —
+// their business pricing is a negotiated flat-rate card per governorate/zone
+// tier, configured on their side during onboarding, not queried per-shipment.
+// So we keep our own fee table here, keyed to Bosta's real cityId (from
+// GET /cities), and the admin fills in the fee Bosta actually quoted us for
+// that governorate. This is what gets looked up at checkout — see
+// lib/shipping-cost.ts.
+model ShippingRate {
+  id String @id @default(cuid())
+
+  bostaCityId String @unique
+  cityNameEn  String
+  cityNameAr  String?
+
+  fee Decimal
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// REVIEW
+// ==========================================
+
+model Review {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  orderItemId String    @unique
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+
+  rating  Int
+  comment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@index([productId])
+}
+// ==========================================
+// SLIDER IMAGE
+// ==========================================
+// Homepage hero carousel, fully admin-managed (/admin/sliders). `link` is
+// nullable on purpose: a slide with no link renders as a plain,
+// non-clickable image instead of navigating anywhere. `sortOrder` controls
+// slide order; `isActive` lets an admin pull a slide from rotation without
+// deleting it.
+model SliderImage {
+  id String @id @default(cuid())
+
+  url  String
+  alt  String?
+  link String?
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// EXTENDED COMMERCE FEATURES
+// ==========================================
+
+model ProductSpecification {
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  keyEn String
+  keyAr String
+  valueEn String
+  valueAr String
+  isFilterable Boolean @default(false)
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([keyEn, valueEn])
+}
+
+model RecentlyViewed {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  viewedAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId, viewedAt])
+}
+
+model StockAlert {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  notifiedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([productId, notifiedAt])
+}
+
+model Notification {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type NotificationType @default(SYSTEM)
+  title String
+  message String
+  link String?
+  readAt DateTime?
+  emailSentAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([emailSentAt, createdAt])
+}
+
+model OrderEvent {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status OrderStatus?
+  title String
+  description String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model ReturnRequest {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status ReturnStatus @default(REQUESTED)
+  reason String
+  customerNote String?
+  adminNote String?
+  refundAmount Decimal?
+  items ReturnItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([orderId])
+  @@index([status])
+}
+
+model ReturnItem {
+  id String @id @default(cuid())
+  returnRequestId String
+  returnRequest ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderItemId String
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  variantId String
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  quantity Int
+  createdAt DateTime @default(now())
+
+  @@index([returnRequestId])
+  @@index([orderItemId])
+}
+
+model LoyaltyTransaction {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type LoyaltyTransactionType
+  points Int
+  balanceAfter Int
+  referenceType String?
+  referenceId String?
+  note String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model InventoryMovement {
+  id String @id @default(cuid())
+  variantId String
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  type InventoryMovementType
+  quantityDelta Int
+  stockAfter Int
+  referenceType String?
+  referenceId String?
+  note String?
+  createdAt DateTime @default(now())
+
+  @@index([variantId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+  actorId String?
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action AuditAction
+  entityType String
+  entityId String?
+  summary String
+  metadata Json?
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model Bundle {
+  id String @id @default(cuid())
+  nameEn String
+  nameAr String
+  slug String @unique
+  discountType BundleDiscountType
+  discountValue Decimal
+  startsAt DateTime?
+  endsAt DateTime?
+  isActive Boolean @default(true)
+  items BundleItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BundleItem {
+  id String @id @default(cuid())
+  bundleId String
+  bundle Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity Int @default(1)
+
+  @@unique([bundleId, productId])
+  @@index([productId])
+}
