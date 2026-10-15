@@ -1,0 +1,268 @@
+.stage {
+  --rotate-x: 0deg;
+  --rotate-y: 0deg;
+  --scene-scale: .92;
+  position: relative;
+  min-height: 630px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 88%);
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 53% 43%, rgb(255 255 255 / 92%), rgb(255 255 255 / 18%) 42%, transparent 64%),
+    linear-gradient(145deg, rgb(236 229 218 / 28%), rgb(255 255 255 / 52%));
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -55px 90px rgb(205 192 174 / 20%);
+  perspective: 1500px;
+  isolation: isolate;
+}
+
+.edition {
+  position: absolute;
+  inset-inline-start: 24px;
+  top: 24px;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #626c7d;
+  text-transform: uppercase;
+}
+
+.edition > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgb(7 23 53 / 10%);
+  border-radius: 50%;
+  color: #0a49b7;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.edition p {
+  margin: 0;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .18em;
+}
+
+.edition small {
+  display: block;
+  margin-top: 4px;
+  color: #9298a3;
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: .12em;
+}
+
+.motionHint {
+  position: absolute;
+  inset-inline-end: 21px;
+  top: 24px;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7a7f89;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.motionHint i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cf8b21;
+  box-shadow: 0 0 0 5px rgb(207 139 33 / 13%);
+  animation: pulse 2s infinite;
+}
+
+.motionToggle {
+  position: absolute;
+  inset-inline-end: 18px;
+  top: 49px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border: 1px solid rgb(7 23 53 / 8%);
+  border-radius: 999px;
+  color: #687080;
+  background: rgb(255 255 255 / 66%);
+  font-size: 9px;
+  backdrop-filter: blur(12px);
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.motionToggle:hover { background: rgb(255 255 255 / 90%); transform: translateY(-1px); }
+.motionToggle svg { width: 14px; fill: none; stroke: #0a49b7; stroke-width: 1.7; }
+
+.scene {
+  position: absolute;
+  inset: 43px -4px 4px 0;
+  transform: scale(var(--scene-scale)) rotateX(var(--rotate-x)) rotateY(var(--rotate-y));
+  transform-origin: 50% 52%;
+  transform-style: preserve-3d;
+  transition: transform 150ms ease-out;
+  will-change: transform;
+}
+
+.sceneGlow {
+  position: absolute;
+  inset: 17% 3% 3% 4%;
+  border-radius: 44% 35% 28% 38%;
+  background: linear-gradient(125deg, rgb(255 255 255 / 14%), rgb(255 255 255 / 60%));
+  box-shadow: inset 0 1px 0 #ffffff, 0 30px 70px rgb(65 57 47 / 7%);
+  transform: translateZ(-120px);
+}
+
+.orbit {
+  position: absolute;
+  border: 2px solid rgb(207 139 33 / 42%);
+  border-radius: 50%;
+  box-shadow: inset 0 0 22px rgb(255 255 255 / 70%), 0 0 28px rgb(207 139 33 / 10%);
+  transform-style: preserve-3d;
+}
+
+.orbitOne { left: 20%; top: 8%; width: 57%; height: 62%; transform: translateZ(-35px) rotateY(-19deg) rotateZ(12deg); }
+.orbitTwo { right: 2%; top: 15%; width: 32%; height: 61%; border-color: rgb(255 255 255 / 82%); opacity: .68; transform: translateZ(-60px) rotateY(33deg); }
+
+.glassPane {
+  position: absolute;
+  right: 2%;
+  top: 20%;
+  width: 16%;
+  height: 32%;
+  border: 1px solid rgb(255 255 255 / 76%);
+  border-radius: 30px;
+  background: linear-gradient(145deg, rgb(255 255 255 / 44%), rgb(255 255 255 / 6%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 90%), 0 30px 70px rgb(62 45 24 / 8%);
+  opacity: .72;
+  transform: translateZ(-20px) rotateY(-12deg);
+  backdrop-filter: blur(12px);
+}
+
+.pedestal {
+  position: absolute;
+  z-index: 2;
+  border-radius: 50%;
+  background: linear-gradient(95deg, #b7ad9f, #fbf6ed 20%, #d4cabc 44%, #ffffff 66%, #b8ae9f);
+  box-shadow: inset 0 8px 13px rgb(255 255 255 / 90%), inset 0 -9px 14px rgb(116 96 72 / 18%), 0 27px 34px rgb(71 55 37 / 18%);
+  transform-style: preserve-3d;
+}
+
+.pedestal::before {
+  position: absolute;
+  inset: -1px 0 34%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 42% 26%, #ffffff, #dad0c2 55%, #b8ad9d);
+  box-shadow: inset 0 2px 3px #ffffff;
+  content: "";
+}
+
+.pedestal span {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: -8px;
+  height: 25px;
+  border-radius: 50%;
+  background: rgb(112 91 64 / 20%);
+  filter: blur(9px);
+}
+
+.pedestalMain { left: 21%; bottom: 9%; width: 61%; height: 18%; transform: translateZ(5px); }
+.pedestalPhone { left: 9%; bottom: 19%; width: 25%; height: 14%; transform: translateZ(55px); }
+.pedestalAudio { right: 7%; bottom: 19%; width: 27%; height: 15%; transform: translateZ(62px); }
+.pedestalWatch { right: 0; bottom: 8%; width: 17%; height: 12%; transform: translateZ(85px); }
+
+.device {
+  position: absolute;
+  z-index: 6;
+  filter: drop-shadow(0 24px 20px rgb(24 25 31 / 22%));
+  transform-style: preserve-3d;
+  transition: margin 130ms ease-out;
+  will-change: transform, margin;
+}
+
+.phone { left: 12%; top: 22%; width: 125px; height: 254px; transform: translateZ(110px) rotateY(23deg) rotateZ(-4deg); }
+.phoneBack { position: absolute; inset: 0; overflow: hidden; border: 2px solid #b7b1aa; border-radius: 29px; background: linear-gradient(105deg,#aba8a6,#f8f6f2 42%,#a4a2a0 72%,#e8e5df); box-shadow: inset 10px 0 18px rgb(255 255 255 / 62%), inset -7px 0 9px rgb(34 34 39 / 19%); }
+.cameraIsland { position: absolute; left: 10px; top: 12px; display: grid; grid-template-columns: 1fr 1fr; width: 64px; height: 70px; padding: 6px; border-radius: 18px; background: linear-gradient(145deg,#c5c3bf,#eeeae4); box-shadow: 0 2px 6px rgb(30 30 30 / 22%); }
+.cameraIsland i { position: relative; width: 25px; height: 25px; border: 2px solid #24252a; border-radius: 50%; background: radial-gradient(circle at 40% 37%,#487193 0 7%,#111722 18%,#020305 48%,#373943 52%,#08090c 70%); box-shadow: inset 0 0 0 2px #565760,0 2px 3px rgb(0 0 0 / 20%); }
+.cameraIsland i:nth-child(3) { grid-column: 1; }
+.cameraIsland b { position: absolute; right: 8px; bottom: 10px; width: 8px; height: 8px; border-radius: 50%; background: #161a1f; box-shadow: 0 -15px 0 #f6e8d0; }
+.phoneMark { position: absolute; left: 50%; top: 50%; width: 27px; height: 32px; border-radius: 48% 48% 52% 52%; background: rgb(86 85 84 / 55%); transform: translate(-50%,-50%); }
+.phoneMark::after { position: absolute; right: 1px; top: -6px; width: 10px; height: 8px; border-radius: 100% 0 100% 0; background: inherit; content: ""; transform: rotate(-23deg); }
+.phoneShine { position: absolute; left: 8%; top: -12%; width: 27%; height: 120%; background: linear-gradient(90deg,transparent,rgb(255 255 255 / 75%),transparent); opacity: .45; transform: rotate(14deg); }
+
+.laptop { left: 31%; top: 29%; width: 300px; height: 235px; transform: translateZ(70px) rotateY(-14deg) rotateX(4deg); }
+.laptopLid { position: absolute; left: 15px; top: 0; width: 270px; height: 176px; padding: 8px; overflow: hidden; border: 3px solid #30343b; border-radius: 12px 12px 7px 7px; background: #181b22; box-shadow: inset 0 0 0 1px #888b8f,0 20px 25px rgb(20 23 28 / 25%); transform-origin: center bottom; }
+.screenArt { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 5px; background: radial-gradient(circle at 40% 50%,#53a1ff,transparent 18%),linear-gradient(140deg,#081738,#0d5fcf 43%,#051635 45%,#237cf4 66%,#061332); }
+.screenArt i { position: absolute; width: 150%; height: 50%; border: 18px solid rgb(54 141 255 / 64%); border-radius: 50%; box-shadow: 0 0 25px #1b7af3; transform: rotate(-28deg); }
+.screenArt i:nth-child(1) { left: -55%; top: 1%; }
+.screenArt i:nth-child(2) { right: -60%; top: 20%; border-color: rgb(151 198 255 / 42%); }
+.screenArt i:nth-child(3) { left: -25%; bottom: -38%; border-color: rgb(14 72 181 / 90%); }
+.cameraDot { position: absolute; left: 50%; top: 3px; width: 3px; height: 3px; border-radius: 50%; background: #777777; }
+.laptopBase { position: absolute; left: -4px; bottom: 37px; width: 308px; height: 38px; border-radius: 4px 4px 48% 48%; background: linear-gradient(#d4d0cb,#818183 45%,#e9e6df 52%,#aaa7a4); box-shadow: 0 22px 18px rgb(37 33 30 / 20%); transform: rotateX(66deg); transform-origin: top; }
+.laptopBase span { position: absolute; left: 42%; top: 3px; width: 16%; height: 3px; border-radius: 0 0 8px 8px; background: #777777; }
+
+.headphones { right: 8%; top: 24%; width: 228px; height: 280px; transform: translateZ(130px) rotateY(-15deg) rotateZ(4deg); }
+.headband { position: absolute; left: 34px; top: 4px; width: 155px; height: 200px; border: 25px solid #d8d4cf; border-bottom: 0; border-radius: 90px 90px 0 0; box-shadow: inset 7px 2px 8px #ffffff,inset -7px 1px 12px rgb(60 56 51 / 17%),0 4px 3px rgb(53 48 43 / 15%); }
+.headband::before { position: absolute; inset: -17px -17px 3px; border: 1px solid rgb(104 97 89 / 36%); border-bottom: 0; border-radius: 74px 74px 0 0; content: ""; }
+.headphoneCup { position: absolute; top: 150px; width: 73px; height: 103px; border-radius: 42px; background: linear-gradient(100deg,#b7b3af,#f0ede8 48%,#aaa6a3); box-shadow: inset 9px 0 12px rgb(255 255 255 / 60%),inset -8px 0 12px rgb(69 64 61 / 17%),0 8px 12px rgb(51 47 44 / 24%); }
+.headphoneCup span { position: absolute; inset: 12px 10px; border: 2px solid rgb(91 86 82 / 17%); border-radius: 35px; background: linear-gradient(90deg,#aaa7a5,#e6e3df); }
+.cupLeft { left: 2px; transform: rotate(8deg) rotateY(19deg); }
+.cupRight { right: 0; transform: rotate(-8deg) rotateY(-21deg); }
+.headphoneArm { position: absolute; top: 121px; width: 17px; height: 68px; border-radius: 8px; background: linear-gradient(90deg,#a7a29e,#edeae6,#aaa6a2); }
+.armLeft { left: 29px; transform: rotate(10deg); }
+.armRight { right: 30px; transform: rotate(-10deg); }
+
+.watch { right: 1%; top: 42%; width: 91px; height: 222px; scale: .88; transform: translateZ(155px) rotateY(-14deg) rotateZ(4deg); }
+.watchStrap { position: absolute; left: 21px; width: 50px; background: linear-gradient(90deg,#18191c,#3e3d3e 45%,#111216); box-shadow: inset 5px 0 6px rgb(255 255 255 / 10%); }
+.strapTop { top: 0; height: 75px; border-radius: 24px 24px 8px 8px; }
+.strapBottom { bottom: 0; height: 82px; border-radius: 8px 8px 24px 24px; }
+.watchFace { position: absolute; left: 7px; top: 61px; z-index: 2; display: grid; width: 78px; height: 88px; place-items: center; border: 3px solid #6a6867; border-radius: 24px; color: #eeeeee; background: radial-gradient(circle at 35% 25%,#27303b,#060708 67%); box-shadow: inset 0 0 0 2px #15171a,0 9px 15px rgb(22 21 20 / 32%); }
+.watchFace i { position: absolute; right: -8px; top: 27px; width: 7px; height: 19px; border-radius: 0 6px 6px 0; background: #6b6967; }
+.watchFace > span { font-size: 24px; line-height: .8; text-align: center; }
+.watchFace small { display: block; color: #b6c2ca; font-size: 19px; }
+
+.sceneNote { position: absolute; right: 3%; top: 19%; z-index: 9; max-width: 110px; margin: 0; color: #6e7073; font-family: var(--font-display); font-size: 15px; line-height: 1.25; text-align: end; }
+
+.floatSlow { animation: floatSlow 7s ease-in-out infinite; }
+.floatMedium { animation: floatMedium 5.8s ease-in-out infinite; }
+.floatFast { animation: floatFast 4.8s ease-in-out infinite; }
+
+@keyframes floatSlow { 50% { translate: 0 -10px; } }
+@keyframes floatMedium { 50% { translate: 0 -14px; } }
+@keyframes floatFast { 50% { translate: 0 -18px; } }
+@keyframes pulse { 50% { box-shadow: 0 0 0 9px rgb(207 139 33 / 0%); } }
+
+@media (max-width: 1180px) {
+  .stage { --scene-scale: .82; }
+  .scene { inset-inline-end: -55px; }
+}
+
+@media (max-width: 1023px) {
+  .stage { --scene-scale: .78; min-height: 550px; }
+  .scene { inset: 38px -24px 0; }
+}
+
+@media (max-width: 640px) {
+  .stage { --scene-scale: .58; min-height: 420px; border-radius: 24px; }
+  .edition,
+  .motionHint { display: none; }
+  .motionToggle { inset-inline-end: 13px; top: 13px; }
+  .scene { inset: -52px -220px -76px -178px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floatSlow,
+  .floatMedium,
+  .floatFast,
+  .motionHint i { animation: none; }
+  .scene,
+  .device,
+  .motionToggle { transition: none; }
+}

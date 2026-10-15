@@ -59,7 +59,7 @@ export async function ProductCard({ product, locale }: ProductCardProps) {
         {product.brand && (
           <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-steel">{product.brand.name}</p>
         )}
-        <h3 className="mt-2 line-clamp-2 min-h-11 font-display text-sm font-semibold leading-snug text-ink sm:text-base">{name}</h3>
+        <h3 className="mt-2 line-clamp-2 min-h-11 font-body text-sm font-semibold leading-snug tracking-[-0.015em] text-ink sm:text-base">{name}</h3>
         <div className="mt-5 flex items-center justify-between gap-2">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <p className="text-sm font-bold tracking-tight text-ink sm:text-base">

@@ -59,7 +59,7 @@ export async function Header() {
   };
 
   return (
-    <header className={`${styles.header} relative z-40 border-b border-line`}>
+    <header className={`${styles.header} relative z-40`}>
       <div className={styles.topStrip}>
         <div className="store-container flex min-h-9 items-center justify-between gap-3">
           <p className="flex items-center gap-2 text-[10px] tracking-wide sm:text-[11px]">
@@ -73,15 +73,17 @@ export async function Header() {
         </div>
       </div>
 
-      <div className="store-container flex flex-wrap items-center justify-between gap-x-5 gap-y-3 py-4 lg:gap-x-10 lg:py-5">
+      <div className={`${styles.mainRow} store-container flex flex-wrap items-center justify-between gap-x-5 gap-y-3 py-3 lg:gap-x-8`}>
         <Link href="/" aria-label="Tech Store" className="group flex shrink-0 items-center gap-3">
           <span className={`${styles.logoMark} hidden size-10 items-center justify-center rounded-xl text-white sm:flex`}>
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="size-6">
-              <path d="M5 7h14M12 7v13M5 3h14" strokeLinecap="round" />
+            <svg aria-hidden="true" viewBox="0 0 32 32" className="size-7">
+              <path d="m4 9 14-6 10 5-14 6Z" fill="#79aaff" />
+              <path d="m4 9 10 5v15L4 23Z" fill="#ffffff" />
+              <path d="m14 14 14-6v15l-14 6Z" fill="#efa634" />
             </svg>
           </span>
-          <span dir="ltr" className={`${styles.wordmark} font-display text-xl font-bold tracking-[-0.07em] text-ink sm:text-[23px]`}>
-            TECH<span className="mx-0.5 text-accent">/</span>STORE<span className="text-accent">.</span>
+          <span dir="ltr" className={`${styles.wordmark} font-body text-xl font-bold tracking-[-0.04em] text-ink sm:text-[23px]`}>
+            Tech Store
           </span>
         </Link>
 
@@ -121,7 +123,7 @@ export async function Header() {
         </nav>
       </div>
 
-      <div className={`${styles.navigationRow} hidden border-t border-line md:block`}>
+      <div className={`${styles.navigationRow} hidden md:block`}>
         <div className="store-container flex min-h-12 items-center justify-between gap-6 text-xs font-medium text-steel">
           <nav aria-label={store("navigation")} className="flex flex-wrap items-center gap-x-7 gap-y-2 py-3">
             <Link href="/#collection" className={`${navigationClass} flex items-center gap-2 font-semibold text-accent`}>{store("shopAll")}<ArrowIcon /></Link>

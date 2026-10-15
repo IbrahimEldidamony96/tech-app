@@ -1,36 +1,36 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #15383a;
-  --color-paper: #f4fafa;
-  --color-signal: #a0e4df;
-  --color-steel: #557272;
+  --color-ink: #071735;
+  --color-paper: #f5f0e7;
+  --color-signal: #cf8b21;
+  --color-steel: #5c687d;
   --color-alert: #c84444;
-  --color-accent: #0d7880;
-  --color-surface: #ffffff;
-  --color-line: #d1e8e4;
-  --color-mist: #e3f4f1;
+  --color-accent: #0a49b7;
+  --color-surface: #fffdfa;
+  --color-line: #ded6ca;
+  --color-mist: #eee7dc;
   --color-gloss: #ffffff;
-  --color-metal: #91bdb9;
-  --color-shadow: #143f40;
-  --color-primary-bright: #0f7c85;
-  --color-primary-main: #0b6872;
-  --color-primary-deep: #084f5a;
-  --color-primary-line: #18848c;
-  --color-primary-hover-bright: #0f8289;
-  --color-primary-hover-main: #0b727b;
-  --color-primary-hover-deep: #075962;
-  --color-banner-start: #102d31;
-  --color-banner-middle: #1a5358;
-  --color-banner-end: #113b40;
-  --color-banner-glow: #77d8cd;
-  --color-art-start: #f7fffd;
-  --color-art-middle: #d7f3ed;
-  --color-art-end: #b4ddd6;
-  --color-art-ink: #2d6363;
-  --color-promo-muted: #b4e7df;
-  --color-promo-copy: #cfefea;
-  --font-display: var(--font-space-grotesk), sans-serif;
+  --color-metal: #b7ad9f;
+  --color-shadow: #2f2a23;
+  --color-primary-bright: #1767e8;
+  --color-primary-main: #0b4bc4;
+  --color-primary-deep: #07368f;
+  --color-primary-line: #2f68c8;
+  --color-primary-hover-bright: #2375f3;
+  --color-primary-hover-main: #0d56d7;
+  --color-primary-hover-deep: #072f82;
+  --color-banner-start: #071735;
+  --color-banner-middle: #0a2453;
+  --color-banner-end: #0d367c;
+  --color-banner-glow: #3c7ee6;
+  --color-art-start: #fffdf9;
+  --color-art-middle: #eee6da;
+  --color-art-end: #ddd2c2;
+  --color-art-ink: #687183;
+  --color-promo-muted: #b9c8e6;
+  --color-promo-copy: #dce5f7;
+  --font-display: var(--font-playfair-display), Georgia, serif;
   --font-body: var(--font-inter), sans-serif;
   --font-mono: var(--font-jetbrains-mono), monospace;
 }
@@ -38,27 +38,30 @@
 html { scroll-behavior: smooth; scroll-padding-top: 2rem; color-scheme: light; }
 
 html.dark {
-  --color-ink: #e8f9f7;
-  --color-paper: #0e1c1d;
-  --color-signal: #91e2dc;
-  --color-steel: #a7c7c5;
+  --color-ink: #f4f0e9;
+  --color-paper: #091226;
+  --color-signal: #f0ad42;
+  --color-steel: #aeb9cd;
   --color-alert: #ff9393;
-  --color-accent: #79d9d3;
-  --color-surface: #162c2e;
-  --color-line: #315153;
-  --color-mist: #203b3d;
-  --color-gloss: #3f6d6b;
-  --color-metal: #a3ccc7;
-  --color-shadow: #020d0e;
+  --color-accent: #75a9ff;
+  --color-surface: #101d37;
+  --color-line: #293a59;
+  --color-mist: #182945;
+  --color-gloss: #314769;
+  --color-metal: #b9ad9d;
+  --color-shadow: #020713;
   color-scheme: dark;
 }
 
 @layer base {
   body {
-    background: radial-gradient(ellipse at 15% 0%, color-mix(in srgb, var(--color-signal) 16%, transparent), transparent 48%), var(--color-paper);
+    background:
+      radial-gradient(ellipse at 78% 0%, color-mix(in srgb, var(--color-gloss) 52%, transparent), transparent 34rem),
+      radial-gradient(ellipse at 8% 42%, color-mix(in srgb, var(--color-accent) 7%, transparent), transparent 34rem),
+      var(--color-paper);
     color: var(--color-ink);
   }
-  ::selection { background: var(--color-signal); color: #15383a; }
+  ::selection { background: color-mix(in srgb,var(--color-signal) 58%,white); color: #071735; }
   :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
   button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   button:not(:disabled), summary { cursor: pointer; }
@@ -71,8 +74,8 @@ html.dark {
 
 @layer components {
   .store-container {
-    width: 100%; max-width: 1280px; margin-inline: auto;
-    padding-inline: clamp(20px, 4vw, 40px);
+    width: 100%; max-width: 1384px; margin-inline: auto;
+    padding-inline: clamp(16px, 3vw, 32px);
   }
   .page-shell {
     width: 100%; max-width: 1152px; margin-inline: auto;
@@ -87,21 +90,21 @@ html.dark {
     text-transform: uppercase; color: var(--color-accent);
   }
   .surface-card {
-    border: 1px solid var(--color-line); border-radius: 24px;
+    border: 1px solid color-mix(in srgb, var(--color-gloss) 76%, var(--color-line)); border-radius: 26px;
     padding: clamp(20px, 3vw, 32px);
-    background: linear-gradient(145deg, color-mix(in srgb, var(--color-gloss) 18%, var(--color-surface)), var(--color-surface) 65%);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-gloss) 65%, transparent), 0 12px 36px -24px color-mix(in srgb, var(--color-shadow) 28%, transparent);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--color-gloss) 44%, var(--color-surface)), var(--color-surface) 65%);
+    box-shadow: inset 0 1px 0 var(--color-gloss), 0 18px 48px -34px color-mix(in srgb, var(--color-shadow) 38%, transparent);
   }
   .button-primary, .button-secondary {
-    display: inline-flex; min-height: 46px; align-items: center; justify-content: center;
-    gap: 10px; border: 1px solid transparent; border-radius: 999px; padding: 12px 24px;
+    display: inline-flex; min-height: 50px; align-items: center; justify-content: center;
+    gap: 12px; border: 1px solid transparent; border-radius: 999px; padding: 13px 26px;
     font-size: 13px; font-weight: 600; line-height: 1.4; text-align: center;
     transition: background 180ms, border-color 180ms, box-shadow 180ms, transform 180ms;
   }
   .button-primary {
     border-color: var(--color-primary-line);
     background: linear-gradient(155deg, var(--color-primary-bright) 0%, var(--color-primary-main) 48%, var(--color-primary-deep) 100%); color: #ffffff;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%), 0 5px 14px -6px color-mix(in srgb, var(--color-shadow) 40%, transparent);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 24%), 0 14px 28px -14px color-mix(in srgb, var(--color-primary-main) 62%, transparent);
   }
   .button-primary:hover:not(:disabled) {
     background: linear-gradient(155deg, var(--color-primary-hover-bright) 0%, var(--color-primary-hover-main) 48%, var(--color-primary-hover-deep) 100%);
@@ -153,9 +156,9 @@ html.dark {
   }
   .collection-chip {
     display: inline-flex; min-height: 42px; align-items: center; gap: 8px;
-    border: 1px solid var(--color-line); border-radius: 999px; background: var(--color-surface);
+    border: 1px solid color-mix(in srgb,var(--color-gloss) 70%,var(--color-line)); border-radius: 999px; background: color-mix(in srgb,var(--color-surface) 72%,transparent);
     padding: 9px 18px; font-size: 12px; font-weight: 500; color: var(--color-steel);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-gloss) 65%, transparent);
+    box-shadow: inset 0 1px 0 var(--color-gloss),0 8px 18px -16px color-mix(in srgb,var(--color-shadow) 34%,transparent);
     transition: color 180ms, background 180ms, border-color 180ms, box-shadow 180ms;
   }
   .collection-chip:hover { border-color: var(--color-accent); color: var(--color-accent); }

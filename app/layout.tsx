@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
 import { SessionProvider } from "next-auth/react";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
@@ -7,10 +7,11 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import "./globals.css";
 
-const spaceGrotesk = Space_Grotesk({
+const playfairDisplay = Playfair_Display({
   subsets: ["latin"],
-  variable: "--font-space-grotesk",
-  weight: ["500", "700"],
+  variable: "--font-playfair-display",
+  weight: "variable",
+  style: ["normal", "italic"],
 });
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const jetbrainsMono = JetBrains_Mono({
@@ -41,7 +42,7 @@ export default async function RootLayout({
       suppressHydrationWarning
       lang={locale}
       dir={dir}
-      className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+      className={`${playfairDisplay.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
       <head><script dangerouslySetInnerHTML={{__html: `(function(){try{var t=localStorage.getItem('theme');var d=t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d)}catch(e){}})()`}} /></head>
       <body className="flex min-h-screen flex-col font-body antialiased">
