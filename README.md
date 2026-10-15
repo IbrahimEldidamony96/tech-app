@@ -30,7 +30,7 @@ A full-stack bilingual (EN/AR) e-commerce platform built to demonstrate producti
 ## Prerequisites
 
 - Node.js 20+
-- A PostgreSQL database (local, or a free instance on [Neon](https://neon.tech) / [Supabase](https://supabase.com))
+- A [Neon](https://neon.tech) PostgreSQL database
 - A Google Cloud OAuth Client (for Google sign-in)
 
 ## Local Setup
@@ -42,7 +42,7 @@ npm install
 # 2. Create your env file (see table below) then fill in the values
 cp env.example .env
 # On Windows PowerShell, use: Copy-Item -LiteralPath env.example -Destination .env
-# Configure DATABASE_URL, AUTH_SECRET, and SEED_PASSWORD before continuing.
+# Configure both database URLs, AUTH_SECRET, and SEED_PASSWORD before continuing.
 
 # 3. Generate the Prisma client (required — app/generated/prisma is gitignored)
 npx prisma generate
@@ -59,20 +59,20 @@ npm run dev
 
 App runs at `http://localhost:3000`.
 
-Installing npm packages does not install or start PostgreSQL. Before running
-migrations, start a local PostgreSQL server or configure a development database
-hosted elsewhere, then put its real connection string in `.env`. For example,
-with a local database named `techstore` and the `postgres` user:
+Use the two connection strings for the same Neon branch. The application URL is
+pooled for serverless traffic; the Prisma CLI URL is direct because schema
+operations require session-level database behavior:
 
 ```dotenv
-DATABASE_URL="postgresql://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/techstore"
+DATABASE_URL="postgresql://USER:PASSWORD@ENDPOINT-pooler.REGION.aws.neon.tech/neondb?sslmode=require"
+DATABASE_URL_UNPOOLED="postgresql://USER:PASSWORD@ENDPOINT.REGION.aws.neon.tech/neondb?sslmode=require"
 ```
 
-Replace `YOUR_POSTGRES_PASSWORD` with the database password; URL-encode special
-characters in it. Create the `techstore` database first if it does not exist.
-If Prisma reports database `placeholder`, `DATABASE_URL` is missing and the
-config is using its generation-only fallback. `prisma generate` can succeed
-without a database connection, but migrations and the app need a real database.
+Copy both values from the Neon **Connect** dialog and URL-encode any special
+characters in the password. If Prisma reports database `placeholder`, neither
+database variable is available and the config is using its generation-only
+fallback. `prisma generate` can succeed without a database connection, but
+migrations and the app need a real database.
 
 Set `SEED_PASSWORD` to the password you want when creating demo accounts. Seeding
 creates missing demo records and preserves existing accounts, passwords, stock,
@@ -89,7 +89,8 @@ explicit and avoid the PostgreSQL driver's deprecated SSL alias warning.
 
 | Variable                       | Description                                                                                          | Example                                           |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `DATABASE_URL`                 | Postgres connection string                                                                           | `postgresql://user:pass@localhost:5432/techstore` |
+| `DATABASE_URL`                 | Pooled Neon connection used by the application                                                       | hostname contains `-pooler`                       |
+| `DATABASE_URL_UNPOOLED`        | Direct Neon connection used by Prisma CLI commands and migrations                                    | hostname does not contain `-pooler`                |
 | `AUTH_SECRET`                  | Encrypts Auth.js JWTs/cookies. **Must be named `AUTH_SECRET`**, not `BETTER_AUTH_SECRET`             | generate below                                    |
 | `SEED_PASSWORD`                | Password used only when creating missing demo accounts; existing passwords are preserved          | choose a private password                         |
 | `AUTH_GOOGLE_ID`               | Google OAuth Client ID                                                                               | from Google Cloud Console                         |
@@ -168,14 +169,15 @@ installation, including on Vercel:
 
 ```bash
 # Install Neon's CLI (one-time)
-npm install -g neonctl
+npm install -g neon
 
 # Log in and create a project
-neonctl auth
-neonctl projects create --name tech-store
+neon auth
+neon project create --name tech-store
 
-# Get the pooled connection string (use this one for serverless — it goes through PgBouncer)
-neonctl connection-string --pooled
+# Link the project and pull DATABASE_URL plus DATABASE_URL_UNPOOLED
+neon link --project-id <project-id> -y
+neon env pull
 ```
 
 > Prefer the web UI? Create a project at [console.neon.tech](https://console.neon.tech), then copy the **pooled** connection string — Vercel's serverless functions open many short-lived connections, and the pooled endpoint avoids exhausting Postgres's connection limit. (Supabase works the same way: use its "Transaction" pooler connection string, port `6543`.)
@@ -183,11 +185,11 @@ neonctl connection-string --pooled
 **2. Apply your schema to the cloud database**
 
 ```bash
-# macOS/Linux — point at the cloud DB for this one command
-DATABASE_URL="<your-neon-pooled-url>" npx prisma migrate deploy
+# macOS/Linux — Prisma reads the direct URL from DATABASE_URL_UNPOOLED
+DATABASE_URL_UNPOOLED="<your-neon-direct-url>" npx prisma migrate deploy
 
 # Windows PowerShell
-$env:DATABASE_URL="<your-neon-pooled-url>"; npx prisma migrate deploy
+$env:DATABASE_URL_UNPOOLED="<your-neon-direct-url>"; npx prisma migrate deploy
 
 # Optional: seed demo data into the cloud DB too (PowerShell)
 $env:DATABASE_URL="<your-neon-pooled-url>"; npx prisma db seed
@@ -203,6 +205,7 @@ vercel link          # links this folder to a Vercel project
 
 # Add each env var (repeat for every variable in the table above)
 vercel env add DATABASE_URL production
+vercel env add DATABASE_URL_UNPOOLED production
 vercel env add AUTH_SECRET production
 vercel env add AUTH_GOOGLE_ID production
 vercel env add AUTH_GOOGLE_SECRET production
