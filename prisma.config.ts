@@ -13,6 +13,7 @@ import { defineConfig } from "prisma/config";
 // بخطأ اتصال واضح ("connection refused" على placeholder) لو لسه معملتش
 // .env — مش هيتظاهر إنه نجح.
 const DATABASE_URL =
+  process.env.DATABASE_URL_UNPOOLED ??
   process.env.DATABASE_URL ??
   "postgresql://placeholder:placeholder@localhost:5432/placeholder";
 
