@@ -1,0 +1,17 @@
+name: Scheduled Cron
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+
+jobs:
+  run-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger API
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://your-app.vercel.app/api/cron
