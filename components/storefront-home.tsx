@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { AnimatedShowcase } from "@/components/animated-showcase";
+import { StaticShowcase } from "@/components/static-showcase";
 import { ProductCard } from "@/components/product-card";
 import { HeroSlider, type SlideItem } from "@/components/hero-slider";
 import { StorefrontIcon, categoryIcon } from "@/components/storefront-icon";
@@ -47,7 +47,7 @@ export async function StorefrontHome({ products, categories, slides, locale, sea
     <div className={`${styles.home} store-container pb-16 pt-5 sm:pb-24 sm:pt-7`}>
       {isLanding && (
         <>
-          <section className={`${styles.heroPanel} reveal-in grid lg:grid-cols-[.86fr_1.14fr]`} aria-labelledby="hero-heading">
+          <section className={`${styles.heroPanel} grid lg:grid-cols-[.86fr_1.14fr]`} aria-labelledby="hero-heading">
             <div className={`${styles.heroCopy} relative z-10 flex flex-col justify-center px-7 py-12 sm:px-12 sm:py-16 lg:py-20`}>
               <p className={`${styles.heroEyebrow} eyebrow flex items-center gap-2.5`}><span className="h-1.5 w-1.5 rounded-full bg-signal" />{t("heroEyebrow")}</p>
               <h1 id="hero-heading" className="mt-6 max-w-[620px] font-display text-[clamp(52px,6vw,88px)] font-normal leading-[.92] tracking-[-0.055em] text-ink">
@@ -60,7 +60,7 @@ export async function StorefrontHome({ products, categories, slides, locale, sea
               </div>
             </div>
             <div className={styles.heroVisual}>
-              <AnimatedShowcase
+              <StaticShowcase
                 caption={t("heroArtLabel")}
                 detail={t("heroArtDetail")}
                 imageAlt={t("heroImageAlt")}

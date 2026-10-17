@@ -1,19 +1,4 @@
-.home { position: relative; overflow-x: clip; animation: home-enter 880ms cubic-bezier(.16,1,.3,1) both; }
-
-.home::before {
-  position: absolute;
-  left: -9%;
-  top: 16%;
-  width: 28%;
-  aspect-ratio: 1;
-  border: 1px solid color-mix(in srgb,var(--color-accent) 8%,transparent);
-  border-radius: 50%;
-  background: color-mix(in srgb,var(--color-accent) 4%,transparent);
-  content: "";
-  filter: blur(2px);
-  pointer-events: none;
-  animation: page-orbit 18s linear infinite;
-}
+.home { position: relative; overflow-x: clip; }
 
 .heroPanel {
   position: relative;
@@ -35,33 +20,13 @@
   content: "";
 }
 
-.heroPanel::after {
-  position: absolute;
-  inset: -120% auto -120% -24%;
-  z-index: 0;
-  width: 14%;
-  background: linear-gradient(90deg,transparent,rgb(255 255 255 / 56%),transparent);
-  content: "";
-  pointer-events: none;
-  transform: rotate(17deg);
-  animation: hero-sweep 7.2s 1.4s ease-in-out infinite;
-}
-
 .heroCopy { min-width: 0; padding-inline-start: clamp(28px,4.2vw,64px); }
 
-.heroCopy > * { animation: copy-enter 860ms cubic-bezier(.16,1,.3,1) both; }
-.heroCopy > :nth-child(1) { animation-delay: 180ms; }
-.heroCopy > :nth-child(2) { animation-delay: 300ms; }
-.heroCopy > :nth-child(3) { animation-delay: 420ms; }
-.heroCopy > :nth-child(4) { animation-delay: 540ms; }
-
 .heroVisual {
-  --visual-direction: 32px;
   position: relative;
   z-index: 1;
   min-width: 0;
   padding: 24px 24px 24px 0;
-  animation: visual-enter 1s 240ms cubic-bezier(.16,1,.3,1) both;
 }
 
 :global(html[dir="rtl"]) .heroVisual { padding: 24px 0 24px 24px; }
@@ -94,28 +59,24 @@
   margin-top: 22px;
   border: 1px solid color-mix(in srgb,var(--color-gloss) 85%,var(--color-line));
   border-radius: 24px;
-  background: color-mix(in srgb,var(--color-surface) 68%,transparent);
+  background: color-mix(in srgb,var(--color-surface) 94%,var(--color-paper));
   padding: 22px clamp(20px,3vw,34px);
   box-shadow: inset 0 1px 0 var(--color-gloss),0 16px 46px -32px color-mix(in srgb,var(--color-shadow) 35%,transparent);
-  backdrop-filter: blur(20px);
-  animation: section-rise 820ms 520ms cubic-bezier(.16,1,.3,1) both;
 }
-
-.benefits > div { animation: benefit-enter 720ms cubic-bezier(.16,1,.3,1) both; }
-.benefits > div:nth-child(1) { animation-delay: 660ms; }
-.benefits > div:nth-child(2) { animation-delay: 770ms; }
-.benefits > div:nth-child(3) { animation-delay: 880ms; }
 
 .benefitIcon,
 .categoryIcon {
   border: 1px solid color-mix(in srgb,var(--color-accent) 12%,var(--color-line));
   background: linear-gradient(145deg,color-mix(in srgb,var(--color-gloss) 78%,var(--color-mist)),var(--color-mist));
   box-shadow: inset 0 1px 0 var(--color-gloss),0 7px 18px -12px color-mix(in srgb,var(--color-shadow) 34%,transparent);
-  animation: icon-float 4.2s ease-in-out infinite;
 }
 
-.benefits > div:nth-child(2) .benefitIcon { animation-delay: -1.4s; }
-.benefits > div:nth-child(3) .benefitIcon { animation-delay: -2.8s; }
+.categorySection,
+.collection,
+.promo {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 650px;
+}
 
 .categorySection { position: relative; }
 
@@ -139,23 +100,7 @@
   content: "";
   pointer-events: none;
   transform: rotate(-18deg);
-  animation: category-orbit 9s linear infinite;
 }
-
-.categoryCard::before {
-  position: absolute;
-  inset: -80% auto -80% -34%;
-  width: 18%;
-  background: linear-gradient(90deg,transparent,color-mix(in srgb,var(--color-gloss) 70%,transparent),transparent);
-  content: "";
-  pointer-events: none;
-  transform: rotate(15deg);
-  transition: left 650ms cubic-bezier(.2,.8,.2,1),opacity 220ms ease;
-  opacity: 0;
-}
-
-.categoryCard:hover::before,
-.categoryCard:focus-visible::before { left: 120%; opacity: 1; }
 
 :global(html[dir="rtl"]) .categoryCard::after { right: auto; left: -18%; }
 
@@ -175,9 +120,10 @@
   box-shadow: inset 0 1px 0 var(--color-gloss);
 }
 
-.productGrid { perspective: 1500px; }
-
-.productGrid > * { transform-origin: 50% 100%; }
+.productGrid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 420px;
+}
 
 .promo {
   isolation: isolate;
@@ -191,25 +137,9 @@
 .promo::before {
   position: absolute;
   inset: 0;
-  background: linear-gradient(110deg,transparent 20%,rgb(255 255 255 / 11%) 42%,transparent 62%);
-  background-size: 220% 100%;
+  background: linear-gradient(125deg,rgb(255 255 255 / 10%),transparent 45%);
   content: "";
   pointer-events: none;
-  animation: promo-sheen 7s ease-in-out infinite;
-}
-
-.promo::after {
-  position: absolute;
-  right: -10%;
-  bottom: -55%;
-  width: 44%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: rgb(49 121 239 / 20%);
-  content: "";
-  filter: blur(35px);
-  pointer-events: none;
-  animation: promo-aurora 7.5s ease-in-out infinite alternate;
 }
 
 .promoLayout { align-items: center; }
@@ -245,34 +175,6 @@
 .standardItem h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
 .standardItem p { margin: 0; color: var(--color-promo-copy); font-size: 11px; line-height: 1.65; opacity: .78; }
 
-@keyframes home-enter { from { opacity: 0; } }
-@keyframes page-orbit { to { transform: rotate(1turn) translateX(24px) rotate(-1turn); } }
-@keyframes copy-enter { from { opacity: 0; filter: blur(7px); transform: translateY(24px); } }
-@keyframes visual-enter { from { opacity: 0; filter: blur(9px); transform: translateX(var(--visual-direction)) scale(.97); } }
-:global(html[dir="rtl"]) .heroVisual { --visual-direction: -32px; }
-@keyframes section-rise { from { opacity: 0; filter: blur(6px); transform: translateY(28px) scale(.985); } }
-@keyframes benefit-enter { from { opacity: 0; transform: translateY(18px); } }
-@keyframes icon-float { 50% { transform: translateY(-5px) rotate(-3deg); box-shadow: inset 0 1px 0 var(--color-gloss),0 15px 24px -14px color-mix(in srgb,var(--color-accent) 30%,transparent); } }
-@keyframes category-orbit { to { rotate: 1turn; } }
-@keyframes hero-sweep { 0%, 46% { left: -24%; opacity: 0; } 55% { opacity: .85; } 72%, 100% { left: 124%; opacity: 0; } }
-@keyframes promo-sheen { 0%, 36% { background-position: 130% 0; } 68%, 100% { background-position: -120% 0; } }
-@keyframes promo-aurora { to { translate: -36% -18%; scale: 1.24; } }
-
-@supports (animation-timeline: view()) {
-  .categorySection > div:first-child,
-  .categoryCard,
-  .collection > div:first-child,
-  .productGrid > *,
-  .promo {
-    animation: section-rise linear both;
-    animation-timeline: view();
-    animation-range: entry 4% cover 30%;
-  }
-
-  .productGrid > :nth-child(even),
-  .categoryCard:nth-child(even) { animation-range: entry 8% cover 34%; }
-}
-
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .categoryCard:hover { transform: translateY(-3px); }
 }
@@ -292,18 +194,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home,
-  .home::before,
-  .heroPanel::after,
-  .heroCopy > *,
-  .heroVisual,
-  .benefits,
-  .benefits > div,
-  .benefitIcon,
-  .categoryIcon,
-  .categoryCard::after,
-  .promo::before,
-  .promo::after { animation: none; }
   .categoryCard,
   .promoLink,
   .secondaryLink { transition: none; }
