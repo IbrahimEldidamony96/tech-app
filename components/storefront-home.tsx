@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { OrbitalHero } from "@/components/orbital-hero";
+import { AnimatedShowcase } from "@/components/animated-showcase";
 import { ProductCard } from "@/components/product-card";
 import { HeroSlider, type SlideItem } from "@/components/hero-slider";
 import { StorefrontIcon, categoryIcon } from "@/components/storefront-icon";
@@ -60,13 +60,12 @@ export async function StorefrontHome({ products, categories, slides, locale, sea
               </div>
             </div>
             <div className={styles.heroVisual}>
-              <OrbitalHero
+              <AnimatedShowcase
                 caption={t("heroArtLabel")}
+                detail={t("heroArtDetail")}
                 imageAlt={t("heroImageAlt")}
-                motionHint={t("heroMotionHint")}
-                motionOff={t("heroMotionOff")}
-                motionOn={t("heroMotionOn")}
                 note={t("heroArtNote")}
+                status={t("heroVisualStatus")}
               />
             </div>
           </section>

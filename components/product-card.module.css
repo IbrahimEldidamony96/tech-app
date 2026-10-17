@@ -1,4 +1,6 @@
 .card {
+  position: relative;
+  isolation: isolate;
   display: flex;
   height: 100%;
   flex-direction: column;
@@ -38,21 +40,27 @@
   content: "";
   pointer-events: none;
   transform: rotate(-18deg);
+  animation: image-orbit 11s linear infinite;
 }
 
 .imageWell::after {
   position: absolute;
-  inset: 0;
+  bottom: -20%;
+  left: -55%;
+  top: -20%;
+  width: 34%;
   background: linear-gradient(115deg, transparent 15%, color-mix(in srgb, var(--color-gloss) 28%, transparent) 42%, transparent 65%);
   content: "";
   pointer-events: none;
   opacity: 0;
-  transition: opacity 250ms ease;
+  transform: rotate(12deg);
+  animation: product-sheen 6.8s 1.2s ease-in-out infinite;
 }
 
-.card:hover .imageWell::after { opacity: 1; }
+.card:hover .imageWell::after { animation-duration: 3.4s; }
 
 .imageWell > span { z-index: 1; }
+.imageWell > img { animation: product-image-enter 900ms cubic-bezier(.16,1,.3,1) both, product-float 5.6s 1s ease-in-out infinite; }
 
 .saleBadge {
   border: 1px solid rgb(255 255 255 / 20%);
@@ -66,6 +74,7 @@
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 24%),0 9px 18px -10px color-mix(in srgb,var(--color-primary-main) 65%,transparent);
   color: #ffffff;
   transition: color 200ms ease, background 200ms ease, border-color 200ms ease;
+  animation: arrow-pulse 3.8s ease-in-out infinite;
 }
 
 .card:hover .arrow,
@@ -77,11 +86,27 @@
 }
 
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .card:hover { transform: translateY(-4px); }
+  .card:hover { transform: translateY(-7px) scale(1.012) rotateX(1.2deg); }
 }
+
+@keyframes image-orbit { to { rotate: 1turn; } }
+
+@keyframes product-sheen {
+  0%, 44% { left: -55%; opacity: 0; }
+  54% { opacity: .75; }
+  72%, 100% { left: 122%; opacity: 0; }
+}
+
+@keyframes product-image-enter { from { opacity: 0; filter: blur(7px); scale: .88; } }
+@keyframes product-float { 50% { translate: 0 -5px; } }
+@keyframes arrow-pulse { 50% { box-shadow: inset 0 1px 0 rgb(255 255 255 / 24%),0 0 0 6px color-mix(in srgb,var(--color-accent) 7%,transparent),0 12px 20px -11px color-mix(in srgb,var(--color-primary-main) 68%,transparent); } }
 
 @media (prefers-reduced-motion: reduce) {
   .card,
   .imageWell::after,
   .arrow { transition: none; }
+  .imageWell::before,
+  .imageWell::after,
+  .imageWell > img,
+  .arrow { animation: none; }
 }
