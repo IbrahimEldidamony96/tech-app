@@ -177,7 +177,9 @@
   "increaseQuantity": "زيادة الكمية",
   "remove": "إزالة",
   "subtotal": "الإجمالي الفرعي",
-  "proceedToCheckout": "المتابعة للدفع"
+  "proceedToCheckout": "المتابعة للدفع",
+  "signInToCheckout": "سجّل الدخول للمتابعة",
+  "signInRequired": "سجّل الدخول أو أنشئ حسابًا قبل إتمام طلبك."
  },
  "Checkout": {
   "title": "الدفع",
@@ -216,6 +218,8 @@
   "couponNote": "يتم تطبيق أي خصم كوبون عند إتمام الطلب.",
   "placingOrder": "جارٍ تقديم الطلب…",
   "placeOrder": "إتمام الطلب",
+  "restoringCart": "جارٍ تجهيز سلتك المحفوظة…",
+  "restoringCartError": "تعذر تجهيز سلتك. ارجع إلى السلة وحاول مرة أخرى.",
   "errors": {
    "selectAddressFields": "من فضلك اختر المحافظة والمنطقة والحي",
    "saveAddressFailed": "تعذر حفظ العنوان",

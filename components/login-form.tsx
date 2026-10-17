@@ -5,11 +5,12 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { safeNextPath } from "@/lib/safe-next-path";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/";
+  const next = safeNextPath(searchParams.get("next"));
   const t = useTranslations("Auth");
 
   const [email, setEmail] = useState("");
@@ -97,7 +98,7 @@ export function LoginForm() {
 
       <p className="mt-7 text-center text-sm leading-6 text-steel">
         {t("noAccount")}{" "}
-        <Link href="/register" className="font-semibold text-accent hover:underline">
+        <Link href={`/register?next=${encodeURIComponent(next)}`} className="font-semibold text-accent hover:underline">
           {t("register")}
         </Link>
       </p>

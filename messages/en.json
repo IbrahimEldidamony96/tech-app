@@ -177,7 +177,9 @@
   "increaseQuantity": "Increase quantity",
   "remove": "Remove",
   "subtotal": "Subtotal",
-  "proceedToCheckout": "Proceed to Checkout"
+  "proceedToCheckout": "Proceed to Checkout",
+  "signInToCheckout": "Sign in to Checkout",
+  "signInRequired": "Sign in or create an account before placing your order."
  },
  "Checkout": {
   "title": "Checkout",
@@ -216,6 +218,8 @@
   "couponNote": "Any coupon discount is applied when you place the order.",
   "placingOrder": "Placing order…",
   "placeOrder": "Place Order",
+  "restoringCart": "Preparing your saved cart…",
+  "restoringCartError": "We couldn’t prepare your cart. Return to your cart and try again.",
   "errors": {
    "selectAddressFields": "Please select your governorate, area, and district",
    "saveAddressFailed": "Could not save address",

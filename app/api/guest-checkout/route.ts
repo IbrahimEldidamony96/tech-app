@@ -1,47 +1,15 @@
-import { createHash } from "crypto";
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { Prisma } from "@/app/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
-import { effectiveVariantPrice } from "@/lib/product-pricing";
-import { resolveBostaCityIdCached, resolveBostaDistrictIdCached, BostaApiError } from "@/lib/bosta";
-import { computeShippingCost, DEFAULT_SHIPPING_FEE } from "@/lib/shipping-cost";
-import { createIntention, paymobCheckoutUrl, PaymobApiError } from "@/lib/paymob";
-import { getAppOrigin } from "@/lib/app-url";
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/require-user";
 
-const schema=z.object({
-  email:z.string().email().toLowerCase().trim(), firstName:z.string().trim().min(2).max(80), lastName:z.string().trim().min(2).max(80), phone:z.string().trim().min(7).max(30),
-  country:z.string().trim().min(2).max(80).default('Egypt'), governorate:z.string().trim().min(1), city:z.string().trim().min(1), area:z.string().trim().optional(), street:z.string().trim().min(2).max(300), buildingNo:z.string().trim().max(50).optional(), apartment:z.string().trim().max(50).optional(), postalCode:z.string().trim().max(30).optional(),
-  bostaCityId:z.string().min(1), bostaDistrictId:z.string().min(1),
-  items:z.array(z.object({variantId:z.string().min(1),quantity:z.number().int().min(1).max(10)})).min(1).max(50),
-  couponCode:z.string().trim().min(1).max(50).transform(v=>v.toUpperCase()).optional(), paymentMethod:z.enum(['CASH_ON_DELIVERY','CARD','WALLET']).default('CASH_ON_DELIVERY'), customerNote:z.string().trim().max(500).optional(), checkoutKey:z.string().uuid(), guestAccessToken:z.string().min(32).max(200),
-});
+// Kept as an explicit compatibility endpoint for old clients. It can no
+// longer create an order: signed-out requests are rejected and signed-in
+// clients must use the authenticated /api/checkout flow.
+export async function POST() {
+  const { error } = await requireUser();
+  if (error) return error;
 
-export async function POST(request:NextRequest){
- const parsed=schema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return NextResponse.json({error:'Invalid checkout data',issues:parsed.error.flatten()},{status:400});const input=parsed.data;
- if(new Set(input.items.map(i=>i.variantId)).size!==input.items.length)return NextResponse.json({error:'Duplicate cart variants are not allowed'},{status:400});
- let cityId:string,districtId:string;try{cityId=await resolveBostaCityIdCached(input.bostaCityId,input.governorate);districtId=await resolveBostaDistrictIdCached(input.bostaDistrictId,cityId,input.city);}catch(err){const msg=err instanceof BostaApiError||err instanceof Error?err.message:'Bosta location failed';return NextResponse.json({error:`Invalid shipping location: ${msg}`},{status:400});}
- const rawToken=input.guestAccessToken;const tokenHash=createHash('sha256').update(rawToken).digest('hex');
- try{
-  const checkout=await prisma.$transaction(async tx=>{
-   const existing=await tx.order.findUnique({where:{checkoutKey:input.checkoutKey},select:{id:true,total:true,status:true,guestAccessTokenHash:true}});if(existing)return {order:existing,existing:true};
-   const sorted=[...input.items].sort((a,b)=>a.variantId.localeCompare(b.variantId));let subtotal=new Prisma.Decimal(0);const orderItems:Prisma.OrderItemCreateWithoutOrderInput[]=[];const priced:{productId:string;categoryId:string;brandId:string|null;quantity:number;lineTotal:Prisma.Decimal}[]=[];const movements:{variantId:string;quantity:number;stockAfter:number}[]=[];
-   for(const item of sorted){
-    const v=await tx.productVariant.findUnique({where:{id:item.variantId},include:{product:{select:{id:true,nameEn:true,isActive:true,deletedAt:true,categoryId:true,brandId:true}}}});
-    if(!v||!v.isActive||!v.product.isActive||v.product.deletedAt)throw new Error('UNAVAILABLE');
-    const updated=await tx.productVariant.updateMany({where:{id:v.id,stock:{gte:item.quantity}},data:{stock:{decrement:item.quantity}}});if(updated.count!==1)throw new Error('OUT_OF_STOCK');
-    const stock=await tx.productVariant.findUniqueOrThrow({where:{id:v.id},select:{stock:true}});const unit=effectiveVariantPrice(v);const line=unit.mul(item.quantity);subtotal=subtotal.add(line);priced.push({productId:v.product.id,categoryId:v.product.categoryId,brandId:v.product.brandId,quantity:item.quantity,lineTotal:line});movements.push({variantId:v.id,quantity:item.quantity,stockAfter:stock.stock});orderItems.push({variant:{connect:{id:v.id}},quantity:item.quantity,productName:v.product.nameEn,sku:v.sku,unitPrice:unit,totalPrice:line});
-   }
-   const now=new Date();let discount=new Prisma.Decimal(0);let couponId:string|null=null;
-   const bundles=await tx.bundle.findMany({where:{isActive:true,OR:[{startsAt:null},{startsAt:{lte:now}}],AND:[{OR:[{endsAt:null},{endsAt:{gte:now}}]}]},include:{items:true}});let best=new Prisma.Decimal(0);for(const b of bundles){if(!b.items.every(req=>priced.filter(i=>i.productId===req.productId).reduce((n,i)=>n+i.quantity,0)>=req.quantity))continue;const d=b.discountType==='PERCENTAGE'?subtotal.mul(b.discountValue).div(100).toDecimalPlaces(2):b.discountValue;if(d.gt(best))best=d;}if(best.gt(subtotal))best=subtotal;discount=discount.add(best);
-   if(input.couponCode){const c=await tx.coupon.findUnique({where:{code:input.couponCode}});if(!c||!c.isActive||(c.startsAt&&c.startsAt>now)||(c.expiresAt&&c.expiresAt<now))throw new Error('INVALID_COUPON');if(c.firstOrderOnly){const count=await tx.order.count({where:{guestEmail:input.email,status:{not:'CANCELLED'}}});if(count>0)throw new Error('INVALID_COUPON');}let base=subtotal;if(c.categoryId)base=priced.filter(i=>i.categoryId===c.categoryId).reduce((x,i)=>x.add(i.lineTotal),new Prisma.Decimal(0));if(c.brandId)base=priced.filter(i=>i.brandId===c.brandId).reduce((x,i)=>x.add(i.lineTotal),new Prisma.Decimal(0));if(base.lte(0)||(c.minOrderAmount&&base.lt(c.minOrderAmount)))throw new Error('INVALID_COUPON');const prior=await tx.order.count({where:{guestEmail:input.email,couponId:c.id,status:{not:'CANCELLED'}}});if(prior>=c.usageLimitPerUser)throw new Error('INVALID_COUPON');if(c.usageLimit!==null){const claim=await tx.coupon.updateMany({where:{id:c.id,usedCount:{lt:c.usageLimit}},data:{usedCount:{increment:1}}});if(claim.count!==1)throw new Error('INVALID_COUPON')}else await tx.coupon.update({where:{id:c.id},data:{usedCount:{increment:1}}});let d=c.type==='PERCENTAGE'?base.mul(c.value).div(100):c.value;d=d.toDecimalPlaces(2);if(c.maxDiscount&&d.gt(c.maxDiscount))d=c.maxDiscount;if(d.gt(base))d=base;discount=discount.add(d);couponId=c.id;}
-   const rate=await tx.shippingRate.findUnique({where:{bostaCityId:cityId}});const baseFee=rate&&rate.isActive?rate.fee:DEFAULT_SHIPPING_FEE;const {shippingCost}=computeShippingCost(baseFee,subtotal);if(discount.gt(subtotal))discount=subtotal;const total=subtotal.sub(discount).add(shippingCost);
-   const order=await tx.order.create({data:{userId:null,guestEmail:input.email,guestAccessTokenHash:tokenHash,checkoutKey:input.checkoutKey,status:'PENDING',paymentStatus:'PENDING',subtotal,shippingCost,discount,total,couponId,customerNote:input.customerNote,shippingFirstName:input.firstName,shippingLastName:input.lastName,shippingPhone:input.phone,shippingCountry:input.country,shippingGovernorate:input.governorate,shippingCity:input.city,shippingArea:input.area,shippingBostaCityId:cityId,shippingBostaDistrictId:districtId,shippingStreet:input.street,shippingBuildingNo:input.buildingNo,shippingApartment:input.apartment,shippingPostalCode:input.postalCode,items:{create:orderItems},payment:{create:{method:input.paymentMethod,status:'PENDING',amount:total}},events:{create:{status:'PENDING',title:'Order placed',description:'Guest checkout order created.'}}},select:{id:true,total:true,status:true}});
-   for(const m of movements)await tx.inventoryMovement.create({data:{variantId:m.variantId,type:'SALE',quantityDelta:-m.quantity,stockAfter:m.stockAfter,referenceType:'ORDER',referenceId:order.id,note:'Guest checkout stock reservation'}});
-   return {order,existing:false};
-  },{timeout:10000});
-  const order=checkout.order;let checkoutUrl:string|null=null;let paymentError:string|undefined;
-  if(!checkout.existing&&input.paymentMethod!=='CASH_ON_DELIVERY'){const integrationId=input.paymentMethod==='CARD'?process.env.PAYMOB_INTEGRATION_ID_CARD:process.env.PAYMOB_INTEGRATION_ID_WALLET;if(!integrationId)paymentError=`Payment method ${input.paymentMethod} is not configured`;else try{const origin=getAppOrigin(request);const {clientSecret}=await createIntention({amountCents:Math.round(order.total.toNumber()*100),specialReference:order.id,integrationId:Number(integrationId),billing:{firstName:input.firstName,lastName:input.lastName,email:input.email,phone:input.phone,street:input.street,building:input.buildingNo,apartment:input.apartment,city:input.city},notes:`Tech Store guest order ${order.id}`,notificationUrl:`${origin}/api/webhooks/paymob`,redirectionUrl:`${origin}/guest-orders/${order.id}?token=${encodeURIComponent(rawToken)}`});checkoutUrl=paymobCheckoutUrl(clientSecret)}catch(err){paymentError=err instanceof PaymobApiError||err instanceof Error?err.message:'Could not start payment'}}
-  return NextResponse.json({data:order,guestToken:rawToken,checkoutUrl,paymentError,idempotent:checkout.existing},{status:checkout.existing?200:201});
- }catch(err){const msg=err instanceof Error?err.message:'';if(msg==='UNAVAILABLE')return NextResponse.json({error:'One of the products is unavailable'},{status:409});if(msg==='OUT_OF_STOCK')return NextResponse.json({error:'One of the products is out of stock'},{status:409});if(msg==='INVALID_COUPON')return NextResponse.json({error:'Coupon is not valid for this order'},{status:400});throw err;}
+  return NextResponse.json(
+    { error: "Guest checkout is disabled. Use authenticated checkout." },
+    { status: 410 },
+  );
 }
