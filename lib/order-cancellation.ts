@@ -11,6 +11,8 @@ const FINANCIALLY_CAPTURED = new Set<string>(["PAID", "PARTIALLY_REFUNDED", "REF
 type CancellationOptions = {
   /** Recheck expiry against locked current DB state, not a cron scan snapshot. */
   unpaidExpiredBefore?: Date;
+  /** Admin manual failure only for uncaptured PENDING online payments. */
+  markPaymentFailed?: boolean;
 };
 
 /**
@@ -42,13 +44,29 @@ export async function cancelOrderAndRestock(
       return false;
     }
 
+    if (options.markPaymentFailed) {
+      // Preserve lock order and never let "mark failed" cancel shipped COD
+      // or any order with captured money.
+      if (current.status !== "PENDING" || current.paymentStatus !== "PENDING" ||
+          !current.payment || current.payment.status !== "PENDING" ||
+          current.payment.method === "CASH_ON_DELIVERY") return false;
+      const failedPayment = await tx.payment.updateMany({
+        where: { orderId: current.id, status: "PENDING" },
+        data: { status: "FAILED" },
+      });
+      if (failedPayment.count !== 1) return false;
+    }
+
     const updated = await tx.order.updateMany({
       where: {
         id: current.id,
         status: { in: allowedFromStatuses },
         paymentStatus: { not: "PAID" },
       },
-      data: { status: "CANCELLED" },
+      data: {
+        status: "CANCELLED",
+        ...(options.markPaymentFailed ? { paymentStatus: "FAILED" as const } : {}),
+      },
     });
     if (updated.count !== 1) return false;
 
