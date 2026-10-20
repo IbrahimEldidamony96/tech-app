@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasRecentGoogleAuthentication, mayUseSession, sessionVersionMatches, RECENT_GOOGLE_AUTH_MS } from "./session-policy";
+import { hasRecentGoogleAuthentication, mayUseSession, sanitizeSessionAuthClaims, sessionVersionMatches, RECENT_GOOGLE_AUTH_MS } from "./session-policy";
 
 test("previous-generation JWT is rejected following staff role change/reset", () => {
   assert.equal(sessionVersionMatches(3, 4), false);
@@ -30,4 +30,21 @@ test("role/password version bump immediately invalidates the old token", () => {
   assert.equal(mayUseSession(row, 7, false), false);
   assert.equal(mayUseSession(row, 8, false), true);
   assert.equal(mayUseSession(row, undefined, true), true);
+});
+
+test("session callback exposes only correctly typed authenticated metadata", () => {
+  assert.deepEqual(
+    sanitizeSessionAuthClaims(1792520000000, "google"),
+    { authenticatedAt: 1792520000000, authProvider: "google" },
+  );
+  assert.deepEqual(
+    sanitizeSessionAuthClaims(undefined, null),
+    { authenticatedAt: undefined, authProvider: null },
+  );
+  for (const invalid of ["1792520000000", null, {}, NaN, Infinity, -1, 1.5]) {
+    assert.equal(sanitizeSessionAuthClaims(invalid, "credentials").authenticatedAt, undefined);
+  }
+  for (const invalid of [{}, [], true, 123, ""]) {
+    assert.equal(sanitizeSessionAuthClaims(Date.now(), invalid).authProvider, null);
+  }
 });
