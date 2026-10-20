@@ -27,7 +27,8 @@ const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 
 const PAYMENT_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
   PENDING: ["PAID", "FAILED"],
-  PAID: ["REFUNDED"],
+  PAID: ["PARTIALLY_REFUNDED", "REFUNDED"],
+  PARTIALLY_REFUNDED: ["REFUNDED"],
   FAILED: [],
   REFUNDED: [],
 };
