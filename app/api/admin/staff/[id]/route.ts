@@ -51,7 +51,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const user = await tx.user.update({
       where: { id },
-      data: { role: parsed.data.role },
+      data: { role: parsed.data.role, sessionVersion: { increment: 1 } },
       select: { id: true, name: true, email: true, role: true },
     });
     await writeAuditLog(tx, {

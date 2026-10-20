@@ -10,7 +10,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:seed": "tsx --test prisma/seed.test.ts",
-    "test:permissions": "tsx --test lib/permissions.test.ts"
+    "test:permissions": "tsx --test lib/permissions.test.ts",
+    "test:sessions": "tsx --test lib/session-policy.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
