@@ -31,7 +31,7 @@ export default async function CheckoutPage() {
     id: item.id,
     quantity: item.quantity,
     name: localized(locale, item.variant.product.nameEn, item.variant.product.nameAr),
-    price: item.variant.price.toNumber(),
+    price: item.effectivePrice.toNumber(),
   }));
 
   return (
