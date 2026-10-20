@@ -61,7 +61,7 @@ export async function cancelOrderAndRestock(
       where: {
         id: current.id,
         status: { in: allowedFromStatuses },
-        paymentStatus: { not: "PAID" },
+        paymentStatus: { notIn: ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"] },
       },
       data: {
         status: "CANCELLED",
