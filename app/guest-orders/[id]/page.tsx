@@ -49,9 +49,11 @@ export default function GuestOrderPage() {
   const [token, setToken] = useState("");
   const [working, setWorking] = useState(true);
   const [error, setError] = useState("");
-  // React StrictMode may remount effects during development; preserve a
-  // one-time legacy token long enough for either effect to exchange it.
-  const initial = useRef<{ id: string; token: string } | null>(null);
+  // Keep only a shared in-flight promise for StrictMode. The historical
+  // bearer is erased from this ref immediately after exchange begins.
+  const initial = useRef<{
+    id: string; token: string; promise: Promise<GuestOrder> | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -70,11 +72,18 @@ export default function GuestOrderPage() {
       const storageKey = `guestOrderToken:${id}`;
       const oldStoredToken = window.localStorage.getItem(storageKey) ?? "";
       window.localStorage.removeItem(storageKey);
-      initial.current = { id, token: legacyUrlToken || oldStoredToken };
+      initial.current = {
+        id, token: legacyUrlToken || oldStoredToken, promise: null,
+      };
     }
 
+    if (!initial.current.promise) {
+      const oneTimeToken = initial.current.token;
+      initial.current.token = "";
+      initial.current.promise = readGuestOrder(id, oneTimeToken || undefined);
+    }
     setWorking(true);
-    readGuestOrder(id, initial.current.token || undefined)
+    initial.current.promise
       .then(data => { if (!cancelled) { setOrder(data); setError(""); } })
       .catch(e => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Access unavailable");
@@ -94,7 +103,7 @@ export default function GuestOrderPage() {
       setOrder(result);
       // Bearers are not retained in React state, localStorage or URLs.
       setToken("");
-      initial.current = { id, token: "" };
+      initial.current = { id, token: "", promise: Promise.resolve(result) };
     } catch (e) {
       setError(e instanceof Error ? e.message : "Access unavailable");
     } finally {
