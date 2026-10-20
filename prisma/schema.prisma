@@ -37,9 +37,9 @@ enum OrderStatus {
 enum PaymentStatus {
   PENDING
   PAID
-  PARTIALLY_REFUNDED
   FAILED
   REFUNDED
+  PARTIALLY_REFUNDED
 }
 
 enum RefundStatus {
