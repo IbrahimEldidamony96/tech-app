@@ -5,10 +5,10 @@
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "prisma generate && tsc --noEmit",
     "test:seed": "tsx --test prisma/seed.test.ts",
     "test:guest-orders": "tsx --test lib/guest-order-access.test.ts",
     "test:checkout": "tsx --test lib/bundle-discount.test.ts",
