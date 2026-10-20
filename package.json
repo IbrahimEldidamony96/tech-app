@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:seed": "tsx --test prisma/seed.test.ts"
+    "test:seed": "tsx --test prisma/seed.test.ts",
+    "test:guest-orders": "tsx --test lib/guest-order-access.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
