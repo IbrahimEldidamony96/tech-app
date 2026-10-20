@@ -1,7 +1,6 @@
-import { redirect } from "next/navigation";
+import { requireAdminPagePermission } from "@/lib/require-admin-page-permission";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { auth } from "@/auth";
 import { hasPermission, type Permission } from "@/lib/permissions";
 import { getAdminStats,type RevenueRange } from "@/lib/queries/admin-stats";
 import { RevenueRangeSelect } from "@/components/admin/revenue-range-select";
@@ -9,14 +8,14 @@ const RANGES:RevenueRange[]=["today","7d","30d"];
 export const dynamic="force-dynamic";
 type SearchParams=Promise<{range?:string}>;
 export default async function AdminHomePage({searchParams}:{searchParams:SearchParams}){
- const session=await auth();if(!session?.user||!hasPermission(session.user.role,"analytics:read"))redirect("/");
+ const guardedUser = await requireAdminPagePermission("analytics:read");
  const {range}=await searchParams;const revenueRange:RevenueRange=RANGES.includes(range as RevenueRange)?range as RevenueRange:"30d";
  const [t,stats]=await Promise.all([getTranslations("AdminHome"),getAdminStats(revenueRange)]);
  const rangeLabel=t(revenueRange==="today"?"rangeToday":revenueRange==="7d"?"range7d":"range30d");
  const cards:{href:string;title:string;desc:string;permission:Permission}[]=[
   {href:"/admin/orders",title:t("orders"),desc:t("ordersDesc"),permission:"orders:read"},{href:"/admin/returns",title:"Returns & refunds",desc:"Approve, receive and refund return requests",permission:"returns:read"},{href:"/admin/products",title:t("products"),desc:t("productsDesc"),permission:"catalog:read"},{href:"/admin/inventory",title:"Inventory ledger",desc:"Stock levels, movements and manual adjustments",permission:"inventory:read"},{href:"/admin/categories",title:t("categories"),desc:t("categoriesDesc"),permission:"catalog:read"},{href:"/admin/brands",title:t("brands"),desc:t("brandsDesc"),permission:"catalog:read"},{href:"/admin/bundles",title:"Product bundles",desc:"Create bundle deals and pricing rules",permission:"marketing:read"},{href:"/admin/coupons",title:t("coupons"),desc:t("couponsDesc"),permission:"marketing:read"},{href:"/admin/sliders",title:t("homepageSlider"),desc:t("homepageSliderDesc"),permission:"marketing:read"},{href:"/admin/reviews",title:t("reviews"),desc:t("reviewsDesc"),permission:"orders:read"},{href:"/admin/shipping-rates",title:t("shippingRates"),desc:t("shippingRatesDesc"),permission:"settings:manage"},{href:"/admin/staff",title:"Staff & roles",desc:"Manage scoped staff access",permission:"staff:manage"},{href:"/admin/audit",title:"Audit log",desc:"Review sensitive administrative actions",permission:"audit:read"},
  ];
- const visibleCards=cards.filter(c=>hasPermission(session.user.role,c.permission)); const max=Math.max(1,...stats.dailyRevenue.map(d=>d.revenue));
+ const visibleCards=cards.filter(c=>hasPermission(guardedUser.role,c.permission)); const max=Math.max(1,...stats.dailyRevenue.map(d=>d.revenue));
  return <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
   <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="font-display text-2xl font-bold text-ink">{t("title")}</h1><RevenueRangeSelect currentRange={revenueRange}/></div>
   <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-6">{[
