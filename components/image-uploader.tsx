@@ -27,6 +27,15 @@ export function ImageUploader({
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(file.type)) {
+      setError("Only JPEG, PNG, WebP and AVIF images can be uploaded");
+      return;
+    }
+    const maxBytes = folder === "avatars" ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size === 0 || file.size > maxBytes) {
+      setError(`Image must be under ${Math.round(maxBytes / (1024 * 1024))} MB`);
+      return;
+    }
 
     setUploading(true);
     setError("");
@@ -42,7 +51,10 @@ export function ImageUploader({
       if (!signRes.ok)
         throw new Error(signBody.error ?? "Could not start upload");
 
-      const { timestamp, signature, cloudName, apiKey } = signBody.data;
+      const { signature, cloudName, apiKey, params } = signBody.data;
+      if (!params || typeof params !== "object" || file.size > signBody.data.maxBytes) {
+        throw new Error("Upload configuration or file size is invalid");
+      }
 
       // 2. الملف نفسه بيتبعت *مباشرة* لـ Cloudinary من المتصفح — مش
       // عن طريق السيرفر بتاعنا خالص (كده مفيش حد أقصى لحجم الـ body
@@ -50,9 +62,12 @@ export function ImageUploader({
       const form = new FormData();
       form.append("file", file);
       form.append("api_key", apiKey);
-      form.append("timestamp", String(timestamp));
       form.append("signature", signature);
-      form.append("folder", folder);
+      // Every parameter must be byte-for-byte identical to the server's
+      // signed policy. Client-supplied folder/public IDs are never trusted.
+      for (const [name, value] of Object.entries(params as Record<string, string | number>)) {
+        form.append(name, String(value));
+      }
 
       const uploadRes = await fetch(
         `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
@@ -65,6 +80,10 @@ export function ImageUploader({
       if (!uploadRes.ok)
         throw new Error(uploadBody.error?.message ?? "Upload failed");
 
+      if (typeof uploadBody.secure_url !== "string" ||
+          !uploadBody.secure_url.startsWith(`https://res.cloudinary.com/${cloudName}/image/upload/`)) {
+        throw new Error("Invalid uploaded image response");
+      }
       onChange(uploadBody.secure_url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -108,7 +127,7 @@ export function ImageUploader({
         >
           Upload file
         </button>
-        <button
+        {folder !== "avatars" && <button
           type="button"
           onClick={() => setMode("url")}
           className={
@@ -116,14 +135,14 @@ export function ImageUploader({
           }
         >
           Paste URL
-        </button>
+        </button>}
       </div>
 
       {mode === "file" ? (
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/avif"
           onChange={handleFileChange}
           disabled={uploading}
           className="mt-2 block text-sm text-steel disabled:opacity-50"
