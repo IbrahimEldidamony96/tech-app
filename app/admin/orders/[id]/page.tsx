@@ -1,7 +1,6 @@
-import { redirect, notFound } from "next/navigation";
+import { requireAdminPagePermission } from "@/lib/require-admin-page-permission";
+import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { OrderActions } from "@/components/admin/order-actions";
 
@@ -12,8 +11,7 @@ export default async function AdminOrderDetailPage({
 }: {
   params: Params;
 }) {
-  const session = await auth();
-  if (!session?.user || !hasPermission(session.user.role, "orders:read")) redirect("/");
+  const guardedUser = await requireAdminPagePermission("orders:read");
 
   const { id } = await params;
 
