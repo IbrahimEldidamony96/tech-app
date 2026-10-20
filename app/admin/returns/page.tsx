@@ -50,7 +50,7 @@ export default async function AdminReturnsPage() {
           <ReturnStatusActions id={r.id} current={r.status} />
           <ReturnRefundActions id={r.id} current={r.status}
             refund={r.refund ? { status: r.refund.status, amount: r.refund.amount.toFixed(2) } : null}
-            paymentMethod={r.order.payment?.method} />
+            paymentMethod={r.order.payment?.method} canConfirm={actor!.role === "ADMIN" || actor!.role === "SUPER_ADMIN"} />
         </div> : null}
       </article>)}
     </div>
