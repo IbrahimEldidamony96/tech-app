@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { effectiveVariantPrice } from "@/lib/product-pricing";
 
 export async function GET(request: NextRequest) {
   const ids = request.nextUrl.searchParams.get("ids")?.split(",").filter(Boolean).slice(0, 4) ?? [];
@@ -16,5 +17,14 @@ export async function GET(request: NextRequest) {
   });
   const order = new Map(ids.map((id, i) => [id, i]));
   data.sort((a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
-  return NextResponse.json({ data });
+  const now = new Date();
+  return NextResponse.json({
+    data: data.map((product) => ({
+      ...product,
+      variants: product.variants.map((variant) => ({
+        ...variant,
+        effectivePrice: effectiveVariantPrice(variant, now),
+      })),
+    })),
+  });
 }
