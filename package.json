@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:seed": "tsx --test prisma/seed.test.ts"
+    "test:seed": "tsx --test prisma/seed.test.ts",
+    "test:checkout": "tsx --test lib/bundle-discount.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
