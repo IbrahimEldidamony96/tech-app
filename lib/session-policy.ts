@@ -11,6 +11,16 @@ export function sessionVersionMatches(
     Number.isSafeInteger(claimed) && claimed >= 0 && claimed === current;
 }
 
+export function mayUseSession(
+  row: { deletedAt: Date | null; sessionVersion: number } | null,
+  versionClaim: unknown,
+  isNewSignIn: boolean,
+): boolean {
+  return row !== null &&
+    row.deletedAt === null &&
+    (isNewSignIn || sessionVersionMatches(versionClaim, row.sessionVersion));
+}
+
 export const RECENT_GOOGLE_AUTH_MS = 5 * 60 * 1000;
 
 /** A long-lived Google session is NOT a recent reauthentication. */
