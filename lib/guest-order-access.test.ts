@@ -19,6 +19,13 @@ test("compares original guest token against one-way DB hash", () => {
   assert.equal(verifyGuestBearer(raw, "x"), false);
 });
 
+test("existing base64 and hex access tokens still verify", () => {
+  const encoded = "a".repeat(40) + "+/==";
+  const stored = createHash("sha256").update(encoded).digest("hex");
+  assert.equal(verifyGuestBearer(encoded, stored), true);
+  assert.equal(verifyGuestBearer(encoded + "x", stored), false);
+});
+
 test("cookie authenticates only one order, one credential hash, one expiry", () => {
   const proof = issueGuestAccessProof(orderId, hash, secret, t);
   assert.equal(verifyGuestAccessProof(proof, orderId, hash, secret, t), true);
