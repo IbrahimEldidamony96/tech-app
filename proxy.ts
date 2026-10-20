@@ -6,5 +6,7 @@ const { auth } = NextAuth(authConfig);
 export const proxy = auth;
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  // Page navigation still gets edge redirects. API handlers authorize with
+  // requirePermission() and return JSON 401/403 (never HTML login pages).
+  matcher: ["/admin/:path*"],
 };
