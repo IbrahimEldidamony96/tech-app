@@ -7,6 +7,8 @@ import { Prisma } from "@/app/generated/prisma/client";
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_request: NextRequest, { params }: Params) {
+  const guard = await requirePermission("catalog:read");
+  if (guard.error) return guard.error;
   const { id: productId } = await params;
 
   const variants = await prisma.productVariant.findMany({

@@ -1,14 +1,11 @@
-import { redirect } from "next/navigation";
+import { requireAdminPagePermission } from "@/lib/require-admin-page-permission";
 import { getTranslations, getLocale } from "next-intl/server";
-import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { ProductForm } from "@/components/admin/product-form";
 import type { AppLocale } from "@/i18n/request";
 
 export default async function NewProductPage() {
-  const session = await auth();
-  if (!session?.user || !hasPermission(session.user.role, "catalog:write")) redirect("/");
+  const guardedUser = await requireAdminPagePermission("catalog:write");
 
   const [categories, brands] = await Promise.all([
     prisma.category.findMany({ orderBy: { nameEn: "asc" }, select: { id: true, nameEn: true, nameAr: true } }),

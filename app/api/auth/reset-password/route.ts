@@ -28,19 +28,39 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await consumeVerificationToken(parsed.data.token, "PASSWORD_RESET");
-  if (!result) {
+  // Compute the hash first. Token consumption, password write, and
+  // invalidation of every previously issued session commit together.
+  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+  const updated = await prisma.$transaction(async (tx) => {
+    const claimed = await consumeVerificationToken(parsed.data.token, "PASSWORD_RESET", tx);
+    if (!claimed) return false;
+
+    const changed = await tx.user.updateMany({
+      where: { id: claimed.userId, deletedAt: null },
+      data: {
+        password: passwordHash,
+        sessionVersion: { increment: 1 },
+      },
+    });
+    if (changed.count !== 1) return false;
+
+    // Invalidate other outstanding password reset links for this user.
+    await tx.verificationToken.updateMany({
+      where: { userId: claimed.userId, type: "PASSWORD_RESET", usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    return true;
+  });
+
+  if (!updated) {
     return NextResponse.json(
       { error: "This reset link is invalid or has expired. Request a new one." },
       { status: 400 },
     );
   }
 
-  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-  await prisma.user.update({
-    where: { id: result.userId },
-    data: { password: passwordHash },
-  });
-
-  return NextResponse.json({ data: { reset: true } });
+  return NextResponse.json(
+    { data: { reset: true, signInRequired: true } },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
