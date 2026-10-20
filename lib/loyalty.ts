@@ -14,11 +14,21 @@ export async function changeLoyaltyPoints(
     referenceType?: string;
     referenceId?: string;
     note?: string;
+    idempotencyKey?: string;
+    // Compensations can create a points debt if a customer already spent
+    // points previously earned on an order that was later returned.
+    allowNegativeBalance?: boolean;
   },
 ) {
   if (!Number.isInteger(input.points) || input.points === 0) return null;
+  if (input.idempotencyKey) {
+    const existing = await tx.loyaltyTransaction.findUnique({
+      where: { idempotencyKey: input.idempotencyKey },
+    });
+    if (existing) return existing;
+  }
 
-  if (input.points < 0) {
+  if (input.points < 0 && !input.allowNegativeBalance) {
     const claimed = await tx.user.updateMany({
       where: { id: input.userId, loyaltyPoints: { gte: Math.abs(input.points) } },
       data: { loyaltyPoints: { increment: input.points } },
@@ -45,6 +55,7 @@ export async function changeLoyaltyPoints(
       referenceType: input.referenceType,
       referenceId: input.referenceId,
       note: input.note,
+      idempotencyKey: input.idempotencyKey,
     },
   });
 }

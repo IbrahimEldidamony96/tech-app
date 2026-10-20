@@ -33,7 +33,7 @@ export default async function CartPage() {
     variant: {
       id: item.variant.id,
       sku: item.variant.sku,
-      price: item.variant.price.toNumber(),
+      price: item.effectivePrice.toNumber(),
       stock: item.variant.stock,
       isActive: item.variant.isActive,
       optionSummary: item.variant.optionValues

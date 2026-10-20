@@ -275,6 +275,7 @@
  "PaymentStatus": {
   "PENDING": "قيد الانتظار",
   "PAID": "تم الدفع",
+  "PARTIALLY_REFUNDED": "تم استرداد جزء من المبلغ",
   "FAILED": "فشل",
   "REFUNDED": "تم الاسترداد"
  },

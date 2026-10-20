@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations/auth";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import authConfig from "./auth.config";
+import { mayUseSession } from "@/lib/session-policy";
 
 // الرسالة دي بتتحط في الـ URL كـ error code بعد الـ redirect
 // (/login?error=CredentialsSignin&code=too_many_attempts) — الفرونت إند
@@ -83,8 +84,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       authorize: authorizeCredentials,
     }),
   ],
-  // callbacks كلهم (authorized, jwt, session) جايين من ...authConfig فوق —
-  // مفيش داعي نكررهم هنا، وده بالظبط اللي كان بيسبب الباج
+  // Node.js-only JWT callback: validate the current database row whenever
+  // auth() is called (pages, route handlers, and Auth.js session endpoint).
+  // Edge auth.config.ts remains Prisma-free. It is only the first gate.
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user, account, trigger, session }) {
+      const id = user?.id ?? token.id;
+      if (typeof id !== "string" || !id) return null;
+      const dbUser = await prisma.user.findUnique({
+        where: { id },
+        select: { id: true, role: true, sessionVersion: true, deletedAt: true },
+      });
+      if (!mayUseSession(dbUser, token.sessionVersion, !!user)) return null;
+      if (!dbUser) return null;
+
+      if (user) {
+        // New sign-in resets the revocation snapshot; token.refresh and
+        // session.update NEVER get to refresh it on behalf of the browser.
+        token.id = dbUser.id;
+        token.sessionVersion = dbUser.sessionVersion;
+        token.authenticatedAt = Date.now();
+        token.authProvider = account?.provider ?? null;
+      }
+
+      // Live role: a demotion is enforced even if a token is still cryptographically valid.
+      token.role = dbUser.role;
+
+      if (trigger === "update" && session) {
+        if (typeof session.name === "string") token.name = session.name;
+        if (typeof session.image === "string") token.picture = session.image;
+      }
+      return token;
+    },
+  },
   events: {
     // createUser بيتفعّل بس لما الـ adapter هو اللي بيعمل اليوزر — يعني
     // تسجيل بجوجل (التسجيل بباسورد بيعمل اليوزر مباشرة في route بتاعنا،

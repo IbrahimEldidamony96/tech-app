@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/require-user";
 import { createNotification } from "@/lib/notifications";
+import { returnQuantityConflict } from "@/lib/return-quantities";
 
 const schema = z.object({
   orderId: z.string().min(1),
@@ -12,7 +13,8 @@ const schema = z.object({
 });
 
 export async function GET() {
-  const { session, error } = await requireUser(); if (error) return error;
+  const { session, error } = await requireUser();
+  if (error) return error;
   const data = await prisma.returnRequest.findMany({
     where: { userId: session!.user.id },
     orderBy: { createdAt: "desc" },
@@ -22,41 +24,71 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { session, error } = await requireUser(); if (error) return error;
+  const { session, error } = await requireUser();
+  if (error) return error;
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid return request", issues: parsed.error.flatten() }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid return request", issues: parsed.error.flatten() }, { status: 400 });
+  }
   const input = parsed.data;
-  if (new Set(input.items.map(i=>i.orderItemId)).size !== input.items.length) return NextResponse.json({ error: "Duplicate order items are not allowed" }, { status: 400 });
-
-  const order = await prisma.order.findFirst({
-    where: { id: input.orderId, userId: session!.user.id, status: "DELIVERED" },
-    include: { items: true },
-  });
-  if (!order) return NextResponse.json({ error: "Delivered order not found" }, { status: 404 });
-
-  const requestedIds = input.items.map(i=>i.orderItemId);
-  const existing = await prisma.returnItem.groupBy({
-    by: ["orderItemId"],
-    where: { orderItemId: { in: requestedIds }, returnRequest: { status: { in: ["REQUESTED","APPROVED","RECEIVED","REFUNDED"] } } },
-    _sum: { quantity: true },
-  });
-  const already = new Map(existing.map(r=>[r.orderItemId,r._sum.quantity??0]));
-  for (const item of input.items) {
-    const source = order.items.find(i=>i.id===item.orderItemId);
-    if (!source) return NextResponse.json({ error: "One of the items does not belong to this order" }, { status: 400 });
-    if ((already.get(item.orderItemId)??0) + item.quantity > source.quantity) return NextResponse.json({ error: `Return quantity exceeds purchased quantity for ${source.productName}` }, { status: 409 });
+  if (new Set(input.items.map((i) => i.orderItemId)).size !== input.items.length) {
+    return NextResponse.json({ error: "Duplicate order items are not allowed" }, { status: 400 });
   }
 
-  const created = await prisma.$transaction(async tx => {
+  // All return reservations for an order serialize on the SAME database row.
+  // Lock BEFORE reading purchased/reserved quantities and hold until commit.
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${input.orderId} FOR UPDATE`;
+
+    const order = await tx.order.findFirst({
+      where: { id: input.orderId, userId: session!.user.id, status: "DELIVERED" },
+      include: { items: true },
+    });
+    if (!order) return { kind: "missing" as const };
+
+    const requestedIds = input.items.map((item) => item.orderItemId);
+    const existing = await tx.returnItem.groupBy({
+      by: ["orderItemId"],
+      where: {
+        orderItemId: { in: requestedIds },
+        returnRequest: { status: { in: ["REQUESTED", "APPROVED", "RECEIVED", "REFUNDED"] } },
+      },
+      _sum: { quantity: true },
+    });
+    const reserved = new Map(existing.map((row) => [row.orderItemId, row._sum.quantity ?? 0]));
+    const conflict = returnQuantityConflict(input.items, order.items, reserved);
+    if (conflict) return { kind: "conflict" as const, conflict };
+
     const rr = await tx.returnRequest.create({
       data: {
-        orderId: order.id, userId: session!.user.id, reason: input.reason, customerNote: input.customerNote,
-        items: { create: input.items.map(i=>({ orderItemId:i.orderItemId, quantity:i.quantity, variantId:order.items.find(x=>x.id===i.orderItemId)!.variantId })) },
+        orderId: order.id,
+        userId: session!.user.id,
+        reason: input.reason,
+        customerNote: input.customerNote,
+        items: { create: input.items.map((item) => ({
+          orderItemId: item.orderItemId,
+          quantity: item.quantity,
+          variantId: order.items.find((source) => source.id === item.orderItemId)!.variantId,
+        })) },
       },
       include: { items: true },
     });
-    await createNotification(tx,{userId:session!.user.id,type:"ORDER",title:"Return requested",message:`Return request ${rr.id} was submitted.`,link:"/account/returns"});
-    return rr;
+    await createNotification(tx, {
+      userId: session!.user.id,
+      type: "ORDER",
+      title: "Return requested",
+      message: `Return request ${rr.id} was submitted.`,
+      link: "/account/returns",
+    });
+    return { kind: "created" as const, data: rr };
   });
-  return NextResponse.json({ data: created }, { status: 201 });
+
+  if (result.kind === "missing") return NextResponse.json({ error: "Delivered order not found" }, { status: 404 });
+  if (result.kind === "conflict") {
+    if (result.conflict.kind === "invalid_item") {
+      return NextResponse.json({ error: "One of the items does not belong to this order" }, { status: 400 });
+    }
+    return NextResponse.json({ error: `Return quantity exceeds purchased quantity for ${result.conflict.productName}` }, { status: 409 });
+  }
+  return NextResponse.json({ data: result.data }, { status: 201 });
 }

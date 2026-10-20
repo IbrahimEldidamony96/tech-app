@@ -17,6 +17,7 @@ export type Permission =
   | "marketing:read"
   | "marketing:write"
   | "staff:manage"
+  | "reviews:moderate"
   | "audit:read"
   | "analytics:read"
   | "settings:manage";
@@ -24,13 +25,13 @@ export type Permission =
 const ALL: Permission[] = [
   "catalog:read","catalog:write","inventory:read","inventory:write",
   "orders:read","orders:write","returns:read","returns:write",
-  "marketing:read","marketing:write","staff:manage","audit:read",
+  "marketing:read","marketing:write","staff:manage","reviews:moderate","audit:read",
   "analytics:read","settings:manage",
 ];
 
 const MATRIX: Record<StaffRole, readonly Permission[]> = {
   SUPER_ADMIN: ALL,
-  ADMIN: ALL,
+  ADMIN: ALL.filter((permission) => permission !== "staff:manage"),
   PRODUCT_MANAGER: ["catalog:read","catalog:write","inventory:read","inventory:write","marketing:read","marketing:write","analytics:read"],
   ORDER_MANAGER: ["orders:read","orders:write","returns:read","returns:write","inventory:read","analytics:read"],
   SUPPORT: ["orders:read","returns:read"],

@@ -1,8 +1,6 @@
-import { redirect } from "next/navigation";
+import { requireAdminPagePermission } from "@/lib/require-admin-page-permission";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
 import { getAllOrders } from "@/lib/queries/admin-orders";
 import type { OrderStatus } from "@/app/generated/prisma/client";
 
@@ -11,8 +9,7 @@ const STATUSES: OrderStatus[] = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED"
 type SearchParams = Promise<{ status?: string }>;
 
 export default async function AdminOrdersPage({ searchParams }: { searchParams: SearchParams }) {
-  const session = await auth();
-  if (!session?.user || !hasPermission(session.user.role, "orders:read")) redirect("/");
+  const guardedUser = await requireAdminPagePermission("orders:read");
 
   const { status } = await searchParams;
   const orders = await getAllOrders(status as OrderStatus | undefined);

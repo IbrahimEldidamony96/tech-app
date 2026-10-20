@@ -28,8 +28,16 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   // نفس مبدأ فحص الملكية تاني — بس هنا بفرق واحد: الأدمن مسموحله يشوف
   // أي أوردر (هيستخدمها في Phase 8)، العميل العادي بيشوف بتاعه هو بس
-  if (order.userId !== session!.user.id && !hasPermission(session!.user.role, "orders:read")) {
-    return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  if (order.userId !== session!.user.id) {
+    // Re-check the staff role in the database before disclosing someone
+    // else's personal details. Never authorize with a JWT role alone.
+    const actor = await prisma.user.findFirst({
+      where: { id: session!.user.id, deletedAt: null },
+      select: { role: true },
+    });
+    if (!hasPermission(actor?.role, "orders:read")) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
   }
 
   return NextResponse.json({ data: order });

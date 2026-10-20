@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getOrCreateCart } from "@/lib/cart";
+import { Prisma } from "@/app/generated/prisma/client";
+import { effectiveVariantPrice } from "@/lib/product-pricing";
 
 export async function getCartForUser(userId: string) {
   const cart = await getOrCreateCart(userId);
@@ -15,6 +17,9 @@ export async function getCartForUser(userId: string) {
           id: true,
           sku: true,
           price: true,
+          salePrice: true,
+          saleStartsAt: true,
+          saleEndsAt: true,
           stock: true,
           isActive: true,
           product: {
@@ -33,8 +38,18 @@ export async function getCartForUser(userId: string) {
     },
   });
 
-  const subtotal = items.reduce((sum, item) => sum + item.variant.price.toNumber() * item.quantity, 0);
+  // One pricing policy for cart, shipping preview, and checkout.
+  // The checkout transaction still re-prices under lock at order creation.
+  const now = new Date();
+  const pricedItems = items.map((item) => ({
+    ...item,
+    effectivePrice: effectiveVariantPrice(item.variant, now),
+  }));
+  const subtotal = pricedItems.reduce(
+    (sum, item) => sum.add(item.effectivePrice.mul(item.quantity)),
+    new Prisma.Decimal(0),
+  ).toNumber();
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  return { id: cart.id, items, subtotal, itemCount };
+  return { id: cart.id, items: pricedItems, subtotal, itemCount };
 }

@@ -15,7 +15,7 @@ type CompareProduct = {
   brand: { name: string } | null;
   category: { nameEn: string; nameAr: string };
   specifications: { keyEn: string; keyAr: string; valueEn: string; valueAr: string }[];
-  variants: { price: string | number; salePrice: string | number | null; saleStartsAt: string | null; saleEndsAt: string | null; stock: number }[];
+  variants: { price: string | number; effectivePrice: string | number; stock: number }[];
 };
 
 function subscribeToCompare(onChange: () => void) {
@@ -144,7 +144,7 @@ export default function ComparePage() {
                 </tr>
                 <tr>
                   <th scope="row" className={labelClass}>{t("price")}</th>
-                  {products.map((product) => <td key={product.id} className={cellClass}><span className="font-display text-lg font-medium tracking-tight text-ink">{product.variants[0] ? money.format(Number(product.variants[0].salePrice ?? product.variants[0].price)) : "—"}</span></td>)}
+                  {products.map((product) => <td key={product.id} className={cellClass}><span className="font-display text-lg font-medium tracking-tight text-ink">{product.variants[0] ? money.format(Number(product.variants[0].effectivePrice)) : "—"}</span></td>)}
                 </tr>
                 <tr>
                   <th scope="row" className={labelClass}>{t("rating")}</th>

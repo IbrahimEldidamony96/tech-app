@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import type { VerificationTokenType } from "@/app/generated/prisma/client";
+import type { Prisma, VerificationTokenType } from "@/app/generated/prisma/client";
 
 const EXPIRY_HOURS: Record<VerificationTokenType, number> = {
   EMAIL_VERIFICATION: 24,
@@ -34,16 +34,17 @@ export async function issueVerificationToken(
 export async function consumeVerificationToken(
   token: string,
   type: VerificationTokenType,
+  db: Pick<Prisma.TransactionClient, "verificationToken"> = prisma,
 ): Promise<{ userId: string } | null> {
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  const result = await prisma.verificationToken.updateMany({
+  const result = await db.verificationToken.updateMany({
     where: { token: tokenHash, type, usedAt: null, expiresAt: { gt: new Date() } },
     data: { usedAt: new Date() },
   });
 
   if (result.count === 0) return null;
 
-  const record = await prisma.verificationToken.findUnique({
+  const record = await db.verificationToken.findUnique({
     where: { token: tokenHash },
     select: { userId: true },
   });

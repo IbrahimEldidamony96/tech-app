@@ -1,15 +1,12 @@
-import { redirect } from "next/navigation";
+import { requireAdminPagePermission } from "@/lib/require-admin-page-permission";
 import { getTranslations, getLocale } from "next-intl/server";
-import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
 import { getShippingRatesForAdmin } from "@/lib/queries/admin-shipping-rates";
 import { ShippingRatesManager } from "@/components/admin/shipping-rates-manager";
 import { BostaApiError } from "@/lib/bosta";
 import type { AppLocale } from "@/i18n/request";
 
 export default async function AdminShippingRatesPage() {
-  const session = await auth();
-  if (!session?.user || !hasPermission(session.user.role, "settings:manage")) redirect("/");
+  const guardedUser = await requireAdminPagePermission("settings:manage");
 
   const t = await getTranslations("AdminShippingRates");
   const locale = (await getLocale()) as AppLocale;
