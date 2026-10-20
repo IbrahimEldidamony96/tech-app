@@ -13,6 +13,7 @@ import {
 } from "@/lib/order-state-machine";
 import { SHIPMENT_STATUS_RANK } from "@/lib/bosta";
 import { changeLoyaltyPoints, pointsEarnedFromOrder, REFERRAL_REWARD_NEW_USER, REFERRAL_REWARD_REFERRER } from "@/lib/loyalty";
+import { compensateOrderLoyalty } from "@/lib/order-loyalty-compensation";
 import { createNotification } from "@/lib/notifications";
 import { notifyStockAvailable } from "@/lib/stock-alerts";
 
@@ -160,18 +161,32 @@ async function applyShipmentStatus(
       await createNotification(tx, { userId: order.userId, type: "SHIPMENT", title: "Order shipped", message: `Order ${orderId} is on the way.`, link: `/orders/${orderId}` });
     } else if (
       nextStatus === "RETURNED" &&
-      canTransitionOrder(order.status, "CANCELLED")
+      (canTransitionOrder(order.status, "CANCELLED") || order.status === "DELIVERED")
     ) {
       // This branch is now protected by the Shipment row lock above. A
       // duplicate/concurrent RETURNED webhook will observe RETURNED and exit
       // before reaching these increments.
+      // A previously DELIVERED shipment can later be returned by Bosta.
+      // Customer return requests may already have restored some stock:
+      // subtract that quantity before replenishing the remaining items.
+      const alreadyReceived = await tx.returnItem.groupBy({
+        by: ["orderItemId"],
+        where: {
+          orderItemId: { in: order.items.map((item) => item.id) },
+          returnRequest: { status: { in: ["RECEIVED", "REFUNDED"] } },
+        },
+        _sum: { quantity: true },
+      });
+      const receivedByItem = new Map(alreadyReceived.map((item) => [item.orderItemId, item._sum.quantity ?? 0]));
       for (const item of order.items) {
+        const stillToRestock = item.quantity - (receivedByItem.get(item.id) ?? 0);
+        if (stillToRestock <= 0) continue;
         const variant = await tx.productVariant.update({
           where: { id: item.variantId },
-          data: { stock: { increment: item.quantity } },
+          data: { stock: { increment: stillToRestock } },
           select: { stock: true },
         });
-        await tx.inventoryMovement.create({ data: { variantId: item.variantId, type: "RETURN", quantityDelta: item.quantity, stockAfter: variant.stock, referenceType: "ORDER", referenceId: orderId, note: "Returned shipment restock" } });
+        await tx.inventoryMovement.create({ data: { variantId: item.variantId, type: "RETURN", quantityDelta: stillToRestock, stockAfter: variant.stock, referenceType: "ORDER", referenceId: orderId, note: "Returned shipment restock (excludes received returns)" } });
         await notifyStockAvailable(tx, item.variantId);
       }
 
@@ -193,7 +208,10 @@ async function applyShipmentStatus(
         data: { status: "CANCELLED" },
         select: { id: true, status: true, paymentStatus: true },
       });
-      await tx.orderEvent.create({ data: { orderId, status: "CANCELLED", title: "Shipment returned", description: "The shipment was returned to the store." } });
+      // Points earned at delivery, referral bonuses and redeemed points are
+      // compensated here. Paid refunds still require financial reconciliation.
+      await compensateOrderLoyalty(tx, orderId, { returnedShipment: true });
+      await tx.orderEvent.create({ data: { orderId, status: "CANCELLED", title: "Shipment returned", description: "The shipment was returned to the store. Any paid refund requires reconciliation." } });
       await createNotification(tx, { userId: order.userId, type: "SHIPMENT", title: "Shipment returned", message: `Order ${orderId} was returned.`, link: `/orders/${orderId}` });
     }
 
