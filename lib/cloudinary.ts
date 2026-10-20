@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { signedImageUploadParams, validateRemoteImageUrl, type UploadArea } from "@/lib/cloudinary-upload-policy";
 
 // Cloudinary — الرفع من ملف محلي بيحصل *مباشرة من المتصفح* لـ Cloudinary
 // (احنا بس بنولّد توقيع)، مش عن طريق السيرفر بتاعنا. ده مهم على Vercel
@@ -47,38 +48,42 @@ export function getCloudinaryPublicConfig(): {
 /** رفع من رابط جاهز (مش ملف من جهاز اليوزر) — بيحصل من عندنا في السيرفر. */
 export async function uploadFromUrl(
   url: string,
-  folder: string,
+  area: Exclude<UploadArea, "avatars">,
+  userId: string,
 ): Promise<string> {
   if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
     throw new CloudinaryError("Cloudinary env vars are not set");
   }
 
+  const remoteUrl = validateRemoteImageUrl(url);
+  if (!remoteUrl) throw new CloudinaryError("Only public HTTPS image URLs are allowed");
+
   const timestamp = Math.floor(Date.now() / 1000);
-  const signature = createUploadSignature({ folder, timestamp });
+  const publicId = `u_${crypto.randomBytes(16).toString("hex")}`;
+  const params = signedImageUploadParams(area, userId, publicId, timestamp);
+  const signature = createUploadSignature(params);
 
   const form = new FormData();
-  form.append("file", url);
+  form.append("file", remoteUrl);
   form.append("api_key", API_KEY);
-  form.append("timestamp", String(timestamp));
   form.append("signature", signature);
-  form.append("folder", folder);
+  for (const [key, value] of Object.entries(params)) {
+    form.append(key, String(value));
+  }
 
   const res = await fetch(
     `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-    {
-      method: "POST",
-      body: form,
-      signal: AbortSignal.timeout(10_000),
-    },
+    { method: "POST", body: form, signal: AbortSignal.timeout(15_000), cache: "no-store" },
   );
-
   const json = await res.json().catch(() => null);
-
   if (!res.ok) {
-    throw new CloudinaryError(
-      json?.error?.message ?? "Cloudinary upload failed",
-    );
+    throw new CloudinaryError(json?.error?.message ?? "Cloudinary image upload failed");
   }
-
-  return json.secure_url as string;
+  // Never return/record a remote URL that Cloudinary did not serve.
+  const secureUrl = json?.secure_url;
+  if (typeof secureUrl !== "string" ||
+      !secureUrl.startsWith(`https://res.cloudinary.com/${CLOUD_NAME}/image/upload/`)) {
+    throw new CloudinaryError("Cloudinary returned an invalid asset URL");
+  }
+  return secureUrl;
 }
