@@ -116,6 +116,7 @@ model User {
   image         String? // صورة البروفايل — بتيجي من جوجل لو دخل بيه
   password      String? // اختياري: يوزر داخل بجوجل بس مالوش باسورد عندنا خالص
   role          Role      @default(CUSTOMER)
+  sessionVersion Int      @default(0) // invalidates all previously issued JWTs on security changes
   loyaltyPoints Int       @default(0)
   referralCode  String?   @unique
   referredById  String?
