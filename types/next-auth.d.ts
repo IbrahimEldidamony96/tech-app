@@ -8,6 +8,11 @@ declare module "next-auth" {
     user: {
       id: string;
       role: "CUSTOMER" | "SUPPORT" | "PRODUCT_MANAGER" | "ORDER_MANAGER" | "ADMIN" | "SUPER_ADMIN";
+    sessionVersion?: number;
+    authenticatedAt?: number;
+    authProvider?: string | null;
+      authenticatedAt?: number;
+      authProvider?: string | null;
     } & DefaultSession["user"];
   }
 }
