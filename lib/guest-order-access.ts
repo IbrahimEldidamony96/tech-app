@@ -14,7 +14,7 @@ export function guestOrderCookieName(orderId: string): string {
 
 export function verifyGuestBearer(rawToken: unknown, storedHash: string): boolean {
   if (typeof rawToken !== "string" || rawToken.length < 20 ||
-      rawToken.length > 256 || !/^[A-Za-z0-9_-]+$/.test(rawToken) ||
+      rawToken.length > 256 || !/^[A-Za-z0-9_+/=-]+$/.test(rawToken) ||
       !/^[a-fA-F0-9]{64}$/.test(storedHash)) return false;
   const presented = createHash("sha256").update(rawToken).digest();
   const expected = Buffer.from(storedHash, "hex");
