@@ -132,6 +132,12 @@ export async function POST(request: Request, { params }: Context) {
 export async function PATCH(request: Request, { params }: Context) {
   const guard = await requirePermission("returns:write");
   if (guard.error) return guard.error;
+  // Cash refund attestation is a financial action. A returns manager may
+  // prepare a refund, but only current database-backed ADMIN/SUPER_ADMIN
+  // authority may confirm that money was returned.
+  if (guard.user!.role !== "ADMIN" && guard.user!.role !== "SUPER_ADMIN") {
+    return failure("Only an administrator can confirm refund settlement", 403);
+  }
   const { id } = await params;
   const parsed = confirmSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failure("Invalid refund confirmation", 400);
