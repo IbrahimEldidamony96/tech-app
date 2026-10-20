@@ -1,0 +1,50 @@
+name: Expire unpaid orders (external schedule)
+
+on:
+  schedule:
+    # Best-effort cadence: GitHub Actions may delay or skip scheduled runs.
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: expire-unpaid-orders
+  cancel-in-progress: false
+
+jobs:
+  invoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      TECH_STORE_BASE_URL: ${{ vars.TECH_STORE_BASE_URL }}
+    steps:
+      - name: Invoke protected expiry endpoint
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$CRON_SECRET" || -z "$TECH_STORE_BASE_URL" ]]; then
+            echo "::error::Configure CRON_SECRET secret and TECH_STORE_BASE_URL repository variable"
+            exit 1
+          fi
+          if [[ ! "$TECH_STORE_BASE_URL" =~ ^https://[a-zA-Z0-9.-]+(:443)?/?$ ]]; then
+            echo "::error::TECH_STORE_BASE_URL must be the HTTPS deployment origin (without path or query)"
+            exit 1
+          fi
+          # Do not follow redirects: forwarding the Authorization header to
+          # another origin would disclose the cron secret.
+          response="$(mktemp)"
+          trap 'rm -f "$response"' EXIT
+          status="$(curl --show-error --silent --retry 2 \
+            --retry-all-errors --connect-timeout 10 --max-time 55 \
+            --proto '=https' --output "$response" --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Accept: application/json" \
+            "${TECH_STORE_BASE_URL%/}/api/cron/expire-unpaid-orders")"
+          if [[ "$status" != "200" ]]; then
+            echo "::error::Expiry job returned HTTP $status"
+            exit 1
+          fi
+          cat "$response"

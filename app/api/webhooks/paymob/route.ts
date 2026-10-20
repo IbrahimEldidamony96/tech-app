@@ -128,10 +128,14 @@ export async function POST(request: NextRequest) {
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Canonical lock order for a given order: Order BEFORE Payment.
+      // Expiry cancellation and the Paymob callback cannot both proceed
+      // from incompatible payment snapshots.
+      await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${merchantOrderId} FOR UPDATE`;
       // نسجل حقيقة الدفع أولًا بشكل idempotent. Payment.status هو سجل
       // الحقيقة لما حصل عند مزود الدفع حتى لو الأوردر اتلغى في نفس اللحظة.
       const updatedPayment = await tx.payment.updateMany({
-        where: { orderId: merchantOrderId, status: "PENDING" },
+        where: { orderId: merchantOrderId, status: { in: ["PENDING", "FAILED"] } },
         data: {
           status: "PAID",
           transactionId: paymobTransactionId,
@@ -163,7 +167,7 @@ export async function POST(request: NextRequest) {
         // الدفع حصل فعلًا، فنسجل ده على snapshot الدفع في الأوردر حتى لو
         // حالته CANCELLED/غير قابلة للتأكيد. لا نرجع مخزون ولا نغير status.
         await tx.order.updateMany({
-          where: { id: merchantOrderId, paymentStatus: "PENDING" },
+          where: { id: merchantOrderId, paymentStatus: { in: ["PENDING", "FAILED"] } },
           data: { paymentStatus: "PAID" },
         });
         console.error(
