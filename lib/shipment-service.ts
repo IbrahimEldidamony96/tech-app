@@ -199,7 +199,7 @@ async function applyShipmentStatus(
         });
       }
 
-      if (order.payment?.status === "PAID") {
+      if (order.payment?.status === "PAID" || order.payment?.status === "PARTIALLY_REFUNDED") {
         console.error(
           `Shipment for order ${orderId} came back RETURNED, but payment is PAID (${order.payment.method}) — manual refund/reconciliation is required.`,
         );
