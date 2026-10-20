@@ -29,20 +29,22 @@ export async function POST(request: NextRequest) {
   const area = parseUploadArea((body as { folder?: unknown }).folder);
   if (!area) return NextResponse.json({ error: "Invalid upload folder" }, { status: 400 });
 
-  const guard = area === "avatars"
-    ? await requireUser()
-    : await requirePermission("catalog:write");
-  if (guard.error) return guard.error;
-
-  const userId = area === "avatars" ? guard.session!.user.id : guard.user!.id;
-  // requireUser alone verifies a JWT, not whether this account was deleted.
-  // Avatar uploads must be impossible for removed accounts.
+  let userId: string;
   if (area === "avatars") {
+    const { session, error } = await requireUser();
+    if (error) return error;
+    userId = session!.user.id;
+    // requireUser on main checks a signed JWT; ensure deleted accounts
+    // cannot obtain valid Cloudinary upload signatures.
     const active = await prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
       select: { id: true },
     });
     if (!active) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } else {
+    const { user, error } = await requirePermission("catalog:write");
+    if (error) return error;
+    userId = user!.id;
   }
 
   const limit = await rateLimit(`cloudinary:sign:${userId}:${area}`, SIGNATURES_PER_HOUR[area], 60 * 60 * 1000);
