@@ -35,3 +35,26 @@ export function hasRecentGoogleAuthentication(
     authenticatedAt <= now &&
     now - authenticatedAt <= RECENT_GOOGLE_AUTH_MS;
 }
+
+
+/**
+ * Auth.js treats custom JWT properties as untrusted values until narrowed.
+ * Never cast browser-facing Session fields from arbitrary token payloads.
+ * Keep this helper pure: auth.config.ts is imported by the Edge proxy.
+ */
+export function sanitizeSessionAuthClaims(
+  authenticatedAt: unknown,
+  authProvider: unknown,
+): { authenticatedAt: number | undefined; authProvider: string | null } {
+  return {
+    authenticatedAt:
+      typeof authenticatedAt === "number" &&
+      Number.isSafeInteger(authenticatedAt) &&
+      authenticatedAt > 0
+        ? authenticatedAt
+        : undefined,
+    authProvider: typeof authProvider === "string" && authProvider.length > 0
+      ? authProvider
+      : null,
+  };
+}

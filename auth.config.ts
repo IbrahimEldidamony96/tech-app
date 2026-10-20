@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from "next-auth";
+import { sanitizeSessionAuthClaims } from "@/lib/session-policy";
 
 // ⚠️ الملف ده لازم يفضل edge-safe (بيتحمّل في middleware.ts اللي شغال على
 // Edge runtime، مش Node). عشان كده: من غير providers فيها DB queries
@@ -56,8 +57,12 @@ export default {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as "CUSTOMER" | "SUPPORT" | "PRODUCT_MANAGER" | "ORDER_MANAGER" | "ADMIN" | "SUPER_ADMIN";
-        session.user.authenticatedAt = token.authenticatedAt;
-        session.user.authProvider = token.authProvider ?? null;
+        const claims = sanitizeSessionAuthClaims(
+          token.authenticatedAt,
+          token.authProvider,
+        );
+        session.user.authenticatedAt = claims.authenticatedAt;
+        session.user.authProvider = claims.authProvider;
       }
       return session;
     },
