@@ -56,3 +56,12 @@ test("refunds are aggregated separately even when gross capture is zero in range
   assert.equal(report.refundedCents, 2355);
   assert.equal(report.netCents, -2355);
 });
+
+test("Cairo midnight boundaries remain correct across both 2026 DST changes", () => {
+  for (const day of ["2026-04-23", "2026-04-24", "2026-04-25",
+                     "2026-10-29", "2026-10-30", "2026-10-31"]) {
+    const start = cairoStartOfDay(day);
+    assert.equal(cairoDayKey(start), day);
+    assert.notEqual(cairoDayKey(new Date(start.getTime() - 1000)), day);
+  }
+});
