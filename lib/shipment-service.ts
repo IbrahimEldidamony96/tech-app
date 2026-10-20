@@ -56,6 +56,8 @@ async function applyShipmentStatus(
     // orderId is unique on Shipment, so this lock serializes all state
     // transitions for one shipment while allowing unrelated orders to run.
     await tx.$queryRaw`SELECT id FROM "Shipment" WHERE "orderId" = ${orderId} FOR UPDATE`;
+    // Serialize shipment restocking against customer/admin return operations.
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
 
     const order = await tx.order.findUnique({
       where: { id: orderId },
