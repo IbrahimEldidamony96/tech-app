@@ -17,6 +17,7 @@ import {
 import { computeShippingCost, DEFAULT_SHIPPING_FEE } from "@/lib/shipping-cost";
 import { getAppOrigin } from "@/lib/app-url";
 import { effectiveVariantPrice } from "@/lib/product-pricing";
+import { calculateBundleDiscount } from "@/lib/bundle-discount";
 import { changeLoyaltyPoints } from "@/lib/loyalty";
 import { createNotification } from "@/lib/notifications";
 
@@ -193,19 +194,13 @@ export async function POST(request: NextRequest) {
           },
           include: { items: true },
         });
+        // A bundle is applied at most once per checkout, on exactly its required
+        // product quantities; unrelated products cannot inflate the discount.
         let bestBundleDiscount = new Prisma.Decimal(0);
         for (const bundle of bundles) {
-          const matches = bundle.items.every((required) => {
-            const bought = pricedItems.filter((i) => i.productId === required.productId).reduce((sum, i) => sum + i.quantity, 0);
-            return bought >= required.quantity;
-          });
-          if (!matches) continue;
-          const candidate = bundle.discountType === "PERCENTAGE"
-            ? subtotal.mul(bundle.discountValue).div(100).toDecimalPlaces(2)
-            : bundle.discountValue;
+          const candidate = calculateBundleDiscount(bundle, pricedItems);
           if (candidate.gt(bestBundleDiscount)) bestBundleDiscount = candidate;
         }
-        if (bestBundleDiscount.gt(subtotal)) bestBundleDiscount = subtotal;
         discount = discount.add(bestBundleDiscount);
 
         if (couponCode) {
@@ -292,6 +287,9 @@ export async function POST(request: NextRequest) {
           couponDiscount = couponDiscount.toDecimalPlaces(2);
           if (coupon.maxDiscount && couponDiscount.gt(coupon.maxDiscount)) couponDiscount = coupon.maxDiscount;
           if (couponDiscount.gt(couponBase)) couponDiscount = couponBase;
+          // Multiple promotions must never make the merchandise total negative.
+          const remainingSubtotal = subtotal.sub(discount);
+          if (couponDiscount.gt(remainingSubtotal)) couponDiscount = remainingSubtotal;
           discount = discount.add(couponDiscount);
           couponId = coupon.id;
         }
