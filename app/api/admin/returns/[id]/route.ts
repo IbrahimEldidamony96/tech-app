@@ -44,6 +44,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         order: {
           select: {
             paymentStatus: true,
+            status: true,
             userId: true,
             items: { select: { id: true, quantity: true, productName: true } },
           },
@@ -56,6 +57,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (parsed.data.status === "RECEIVED") {
+      // When Bosta returned the entire shipment, all remaining stock was
+      // already restored. Never receive another customer return for it.
+      if (rr.order.status === "CANCELLED") return { kind: "invalid" as const, current: rr.status };
       // A defence in depth for legacy or manually inserted over-reservations.
       // Only previously received (stock-restored) quantities count here;
       // pending/rejected requests have not increased stock.
