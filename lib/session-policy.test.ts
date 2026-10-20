@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasRecentGoogleAuthentication, sessionVersionMatches, RECENT_GOOGLE_AUTH_MS } from "./session-policy";
+import { hasRecentGoogleAuthentication, mayUseSession, sessionVersionMatches, RECENT_GOOGLE_AUTH_MS } from "./session-policy";
 
 test("previous-generation JWT is rejected following staff role change/reset", () => {
   assert.equal(sessionVersionMatches(3, 4), false);
@@ -19,4 +19,15 @@ test("only a recent Google login satisfies first-password step-up", () => {
   assert.equal(hasRecentGoogleAuthentication("credentials", now, now), false);
   assert.equal(hasRecentGoogleAuthentication("google", now + 100, now), false);
   assert.equal(hasRecentGoogleAuthentication("google", undefined, now), false);
+});
+
+test("deleted users lose sessions even for a matching version", () => {
+  assert.equal(mayUseSession({ deletedAt: new Date(), sessionVersion: 0 }, 0, false), false);
+  assert.equal(mayUseSession(null, 0, false), false);
+});
+test("role/password version bump immediately invalidates the old token", () => {
+  const row = { deletedAt: null, sessionVersion: 8 };
+  assert.equal(mayUseSession(row, 7, false), false);
+  assert.equal(mayUseSession(row, 8, false), true);
+  assert.equal(mayUseSession(row, undefined, true), true);
 });
