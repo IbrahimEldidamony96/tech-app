@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/require-user";
 import { changePasswordSchema } from "@/lib/validations/profile";
+import { hasRecentGoogleAuthentication } from "@/lib/session-policy";
 
 export async function PATCH(request: NextRequest) {
   const { session, error } = await requireUser();
@@ -23,41 +24,63 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  const userId = session!.user.id;
   const user = await prisma.user.findUnique({
-    where: { id: session!.user.id },
-    select: { password: true },
+    where: { id: userId },
+    select: { password: true, sessionVersion: true, deletedAt: true },
   });
+  if (!user || user.deletedAt) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  if (!user)
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-
-  // يوزر عنده باسورد بالفعل (سواء اتسجل بالكريدنشيالز أو حط واحد قبل
-  // كده) لازم يثبت إنه هو صاحب الحساب فعلًا بالباسورد الحالي. يوزر
-  // داخل بجوجل بس (password === null) بيحط أول باسورد له من غير شرط ده.
-  if (user.password) {
+  if (user.password !== null) {
+    // Password owners must prove the current password on every change.
     if (!parsed.data.currentPassword) {
-      return NextResponse.json(
-        { error: "Current password is required" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Current password is required" }, { status: 400 });
     }
-    const matches = await bcrypt.compare(
-      parsed.data.currentPassword,
-      user.password,
-    );
-    if (!matches) {
-      return NextResponse.json(
-        { error: "Current password is incorrect" },
-        { status: 401 },
-      );
+    if (!await bcrypt.compare(parsed.data.currentPassword, user.password)) {
+      return NextResponse.json({ error: "Current password is incorrect" }, { status: 401 });
+    }
+  } else {
+    // A stolen/old OAuth session must never create a permanent password.
+    // Sign out and sign in with Google again, within five minutes.
+    if (!hasRecentGoogleAuthentication(
+      session!.user.authProvider,
+      session!.user.authenticatedAt,
+    )) {
+      return NextResponse.json({
+        error: "Please sign in again with Google to set your first password.",
+        code: "REAUTH_REQUIRED",
+      }, { status: 403 });
     }
   }
 
   const newHash = await bcrypt.hash(parsed.data.newPassword, 10);
-  await prisma.user.update({
-    where: { id: session!.user.id },
-    data: { password: newHash },
+
+  // CAS prevents concurrent password updates using the same old credentials.
+  // Session revocation is committed atomically with the new password hash.
+  const updated = await prisma.user.updateMany({
+    where: {
+      id: userId,
+      deletedAt: null,
+      sessionVersion: user.sessionVersion,
+      password: user.password,
+    },
+    data: {
+      password: newHash,
+      sessionVersion: { increment: 1 },
+    },
   });
 
-  return NextResponse.json({ data: { success: true } });
+  if (updated.count !== 1) {
+    return NextResponse.json({
+      error: "Your account changed during this request. Sign in again.",
+      code: "SESSION_CHANGED",
+    }, { status: 409 });
+  }
+
+  // Auth.js no longer accepts this JWT, nor any other previous session.
+  return NextResponse.json({
+    data: { success: true, signInRequired: true },
+  }, { headers: { "Cache-Control": "no-store" } });
 }
