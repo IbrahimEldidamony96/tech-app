@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/require-user";
 import { updateReviewSchema } from "@/lib/validations/review";
 import { syncProductRating } from "@/lib/product-maintenance";
+import { hasPermission } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -56,9 +57,16 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   if (!review) {
     return NextResponse.json({ error: "Review not found" }, { status: 404 });
   }
-  // حذف: صاحب الريفيو أو الأدمن (moderation — منتج فيه كلام مسيء مثلاً)
-  if (review.userId !== session!.user.id && session!.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Review not found" }, { status: 404 });
+  // Only the owner or a CURRENT database-authorized moderator may delete.
+  // JWT roles must not grant moderation after staff demotion/deletion.
+  if (review.userId !== session!.user.id) {
+    const actor = await prisma.user.findFirst({
+      where: { id: session!.user.id, deletedAt: null },
+      select: { role: true },
+    });
+    if (!hasPermission(actor?.role, "reviews:moderate")) {
+      return NextResponse.json({ error: "Review not found" }, { status: 404 });
+    }
   }
 
   await prisma.review.delete({ where: { id } });

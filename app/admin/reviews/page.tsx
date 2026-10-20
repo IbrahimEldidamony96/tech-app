@@ -1,16 +1,14 @@
-import { redirect } from "next/navigation";
+import { hasPermission } from "@/lib/permissions";
+import { requireAdminPagePermission } from "@/lib/require-admin-page-permission";
 import Link from "next/link";
 import { getTranslations, getLocale } from "next-intl/server";
-import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
 import { getAllReviewsForAdmin } from "@/lib/queries/admin-reviews";
 import { localized } from "@/lib/locale";
 import { DeleteReviewButton } from "@/components/admin/delete-review-button";
 import type { AppLocale } from "@/i18n/request";
 
 export default async function AdminReviewsPage() {
-  const session = await auth();
-  if (!session?.user || !hasPermission(session.user.role, "orders:read")) redirect("/");
+  const guardedUser = await requireAdminPagePermission("orders:read");
 
   const reviews = await getAllReviewsForAdmin();
   const t = await getTranslations("AdminReviews");
@@ -43,7 +41,7 @@ export default async function AdminReviewsPage() {
                   <span className="font-mono text-xs text-steel">
                     {review.createdAt.toLocaleDateString()}
                   </span>
-                  <DeleteReviewButton reviewId={review.id} />
+                  {hasPermission(guardedUser.role, "reviews:moderate") && <DeleteReviewButton reviewId={review.id} />}
                 </div>
               </div>
               <p className="mt-2 text-sm text-steel">

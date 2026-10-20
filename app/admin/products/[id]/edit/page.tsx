@@ -1,7 +1,6 @@
-import { redirect, notFound } from "next/navigation";
+import { requireAdminPagePermission } from "@/lib/require-admin-page-permission";
+import { notFound } from "next/navigation";
 import { getTranslations, getLocale } from "next-intl/server";
-import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getProductForAdminEdit } from "@/lib/queries/admin-products";
 import { ProductForm } from "@/components/admin/product-form";
@@ -15,8 +14,7 @@ import type { AppLocale } from "@/i18n/request";
 type Params = Promise<{ id: string }>;
 
 export default async function EditProductPage({ params }: { params: Params }) {
-  const session = await auth();
-  if (!session?.user || !hasPermission(session.user.role, "catalog:write")) redirect("/");
+  const guardedUser = await requireAdminPagePermission("catalog:write");
 
   const { id } = await params;
 
