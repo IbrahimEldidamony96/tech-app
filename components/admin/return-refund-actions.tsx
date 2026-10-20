@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 
 type Refund = { status: "PENDING_CONFIRMATION" | "CONFIRMED"; amount: string | number };
 export function ReturnRefundActions({
-  id, current, refund, paymentMethod,
+  id, current, refund, paymentMethod, canConfirm,
 }: {
   id: string;
   current: string;
   refund: Refund | null;
   paymentMethod?: string | null;
+  canConfirm: boolean;
 }) {
   const [amount, setAmount] = useState("");
   const [evidenceReference, setEvidenceReference] = useState("");
@@ -59,11 +60,11 @@ export function ReturnRefundActions({
     {isManual && <input className="w-full max-w-sm rounded border border-steel/30 p-2 text-sm"
       value={evidenceReference} onChange={(e) => setEvidenceReference(e.target.value)}
       placeholder="Manual refund receipt/reference (min 8 characters)" />}
-    <button disabled={busy || (isManual && evidenceReference.trim().length < 8)}
+    {canConfirm ? <button disabled={busy || (isManual && evidenceReference.trim().length < 8)}
       className="rounded bg-ink px-3 py-2 text-xs text-paper disabled:opacity-50"
       onClick={() => void submit("PATCH", { evidenceReference })}>
       {isManual ? "Confirm manual settlement" : "Verify Paymob and confirm"}
-    </button>
+    </button> : <p className="text-xs text-steel">An administrator must confirm the settlement.</p>}
     {error && <p className="text-xs text-alert" role="alert">{error}</p>}
   </div>;
 }
