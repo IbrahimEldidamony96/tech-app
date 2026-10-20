@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { requireAdminPagePermission } from "@/lib/require-admin-page-permission";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
 import { ReturnStatusActions } from "@/components/admin/return-status-actions";
@@ -8,16 +7,8 @@ import { ReturnRefundActions } from "@/components/admin/return-refund-actions";
 export const dynamic = "force-dynamic";
 
 export default async function AdminReturnsPage() {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  // Never trust the 7-day session role snapshot for customer refunds/details.
-  const actor = await prisma.user.findFirst({
-    where: { id: session.user.id, deletedAt: null },
-    select: { role: true },
-  });
-  if (!hasPermission(actor?.role, "returns:read")) redirect("/");
-
-  const canWrite = hasPermission(actor!.role, "returns:write");
+  const guardedUser = await requireAdminPagePermission("returns:read");
+  const canWrite = hasPermission(guardedUser.role, "returns:write");
   const rows = await prisma.returnRequest.findMany({
     orderBy: { createdAt: "desc" },
     take: 200,
@@ -50,7 +41,7 @@ export default async function AdminReturnsPage() {
           <ReturnStatusActions id={r.id} current={r.status} />
           <ReturnRefundActions id={r.id} current={r.status}
             refund={r.refund ? { status: r.refund.status, amount: r.refund.amount.toFixed(2) } : null}
-            paymentMethod={r.order.payment?.method} canConfirm={actor!.role === "ADMIN" || actor!.role === "SUPER_ADMIN"} />
+            paymentMethod={r.order.payment?.method} canConfirm={guardedUser.role === "ADMIN" || guardedUser.role === "SUPER_ADMIN"} />
         </div> : null}
       </article>)}
     </div>
