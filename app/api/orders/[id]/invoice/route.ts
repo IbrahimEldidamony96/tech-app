@@ -36,8 +36,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     include: { items: true, payment: true, user: { select: { name: true, email: true } } },
   });
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
-  const allowed = order.userId === session.user.id || hasPermission(session.user.role, "orders:read");
-  if (!allowed) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  if (order.userId !== session.user.id) {
+    const actor = await prisma.user.findFirst({
+      where: { id: session.user.id, deletedAt: null },
+      select: { role: true },
+    });
+    if (!hasPermission(actor?.role, "orders:read")) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+  }
 
   const customer = order.user?.name ?? `${order.shippingFirstName} ${order.shippingLastName}`;
   const lines = [
