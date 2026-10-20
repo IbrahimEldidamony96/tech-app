@@ -8,14 +8,13 @@ import { writeAuditLog } from "@/lib/audit";
 import { returnQuantityConflict } from "@/lib/return-quantities";
 
 const schema = z.object({
-  status: z.enum(["APPROVED", "REJECTED", "RECEIVED", "REFUNDED"]),
+  status: z.enum(["APPROVED", "REJECTED", "RECEIVED"]),
   adminNote: z.string().trim().max(1000).optional(),
-  refundAmount: z.number().min(0).optional(),
 });
 const transitions: Record<string, readonly string[]> = {
   REQUESTED: ["APPROVED", "REJECTED"],
   APPROVED: ["RECEIVED", "REJECTED"],
-  RECEIVED: ["REFUNDED"],
+  RECEIVED: [],
   REJECTED: [],
   REFUNDED: [],
 };
@@ -45,6 +44,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         order: {
           select: {
             paymentStatus: true,
+            status: true,
             userId: true,
             items: { select: { id: true, quantity: true, productName: true } },
           },
@@ -57,6 +57,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (parsed.data.status === "RECEIVED") {
+      // When Bosta returned the entire shipment, all remaining stock was
+      // already restored. Never receive another customer return for it.
+      if (rr.order.status === "CANCELLED") return { kind: "invalid" as const, current: rr.status };
       // A defence in depth for legacy or manually inserted over-reservations.
       // Only previously received (stock-restored) quantities count here;
       // pending/rejected requests have not increased stock.
@@ -101,13 +104,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       data: {
         status: parsed.data.status,
         adminNote: parsed.data.adminNote,
-        ...(parsed.data.refundAmount !== undefined ? { refundAmount: parsed.data.refundAmount } : {}),
       },
     });
-    if (parsed.data.status === "REFUNDED" && rr.order.paymentStatus === "PAID") {
-      await tx.payment.updateMany({ where: { orderId: rr.orderId, status: "PAID" }, data: { status: "REFUNDED" } });
-      await tx.order.update({ where: { id: rr.orderId }, data: { paymentStatus: "REFUNDED" } });
-    }
     await createNotification(tx, {
       userId: rr.userId,
       type: "ORDER",

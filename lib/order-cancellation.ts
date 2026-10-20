@@ -22,7 +22,9 @@ export async function cancelOrderAndRestock(
       where: {
         id: order.id,
         status: { in: allowedFromStatuses },
-        paymentStatus: { not: "PAID" },
+        // A partial refund is still proof of captured funds; never restock
+        // or cancel it as though it were an unpaid checkout.
+        paymentStatus: { notIn: ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"] },
       },
       data: { status: "CANCELLED" },
     });

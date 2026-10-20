@@ -275,6 +275,7 @@
  "PaymentStatus": {
   "PENDING": "Pending",
   "PAID": "Paid",
+  "PARTIALLY_REFUNDED": "Partially refunded",
   "FAILED": "Failed",
   "REFUNDED": "Refunded"
  },

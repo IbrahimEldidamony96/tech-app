@@ -10,7 +10,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:seed": "tsx --test prisma/seed.test.ts",
-    "test:returns": "tsx --test lib/return-quantities.test.ts"
+    "test:returns": "tsx --test lib/return-quantities.test.ts",
+    "test:refund": "tsx --test lib/refund-accounting.test.ts lib/paymob-refund.test.ts lib/order-loyalty-compensation.test.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
