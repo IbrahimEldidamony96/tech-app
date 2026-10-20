@@ -37,8 +37,14 @@ enum OrderStatus {
 enum PaymentStatus {
   PENDING
   PAID
+  PARTIALLY_REFUNDED
   FAILED
   REFUNDED
+}
+
+enum RefundStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
 }
 
 enum PaymentMethod {
@@ -619,6 +625,7 @@ model Order {
   shipment Shipment?
   events OrderEvent[]
   returnRequests ReturnRequest[]
+  refunds Refund[]
 
   customerNote String?
   loyaltyPointsRedeemed Int @default(0)
@@ -681,6 +688,7 @@ model Payment {
   transactionId String? @unique
 
   paidAt DateTime?
+  refunds Refund[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -869,12 +877,40 @@ model ReturnRequest {
   adminNote String?
   refundAmount Decimal?
   items ReturnItem[]
+  refund Refund?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId, createdAt])
   @@index([orderId])
   @@index([status])
+}
+
+// Every return has at most one refund allocation. An intent cannot be
+// mistaken for money returned; only CONFIRMED rows contribute to accounting.
+model Refund {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  returnRequestId String @unique
+  returnRequest ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Restrict)
+  paymentId String
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  status RefundStatus @default(PENDING_CONFIRMATION)
+  amount Decimal @db.Decimal(12, 2)
+  // Paymob's cumulative refunded cents at the moment this intent was created.
+  // For COD, the refund is manually attested with an independent evidence ref.
+  providerBaselineCents Int?
+  providerReference String? @unique
+  confirmationNote String?
+  requestedById String
+  confirmedById String?
+  confirmedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId, status])
+  @@index([paymentId, status])
 }
 
 model ReturnItem {
@@ -902,6 +938,8 @@ model LoyaltyTransaction {
   referenceType String?
   referenceId String?
   note String?
+  // Unique operation key makes earned/redeemed/referral compensation idempotent.
+  idempotencyKey String? @unique
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
