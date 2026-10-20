@@ -8,14 +8,13 @@ import { writeAuditLog } from "@/lib/audit";
 import { returnQuantityConflict } from "@/lib/return-quantities";
 
 const schema = z.object({
-  status: z.enum(["APPROVED", "REJECTED", "RECEIVED", "REFUNDED"]),
+  status: z.enum(["APPROVED", "REJECTED", "RECEIVED"]),
   adminNote: z.string().trim().max(1000).optional(),
-  refundAmount: z.number().min(0).optional(),
 });
 const transitions: Record<string, readonly string[]> = {
   REQUESTED: ["APPROVED", "REJECTED"],
   APPROVED: ["RECEIVED", "REJECTED"],
-  RECEIVED: ["REFUNDED"],
+  RECEIVED: [],
   REJECTED: [],
   REFUNDED: [],
 };
@@ -101,13 +100,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       data: {
         status: parsed.data.status,
         adminNote: parsed.data.adminNote,
-        ...(parsed.data.refundAmount !== undefined ? { refundAmount: parsed.data.refundAmount } : {}),
       },
     });
-    if (parsed.data.status === "REFUNDED" && rr.order.paymentStatus === "PAID") {
-      await tx.payment.updateMany({ where: { orderId: rr.orderId, status: "PAID" }, data: { status: "REFUNDED" } });
-      await tx.order.update({ where: { id: rr.orderId }, data: { paymentStatus: "REFUNDED" } });
-    }
     await createNotification(tx, {
       userId: rr.userId,
       type: "ORDER",
