@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { signOut } from "next-auth/react";
 
 export function PasswordForm({ hasPassword }: { hasPassword: boolean }) {
   const t = useTranslations("Account");
@@ -41,11 +42,13 @@ export function PasswordForm({ hasPassword }: { hasPassword: boolean }) {
       return;
     }
 
+    // This password change atomically revoked all previous JWT sessions,
+    // including the current one. Clear its browser cookie and sign in again.
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
     setSuccess(true);
-    setSubmitting(false);
+    await signOut({ redirectTo: "/login?reason=password-changed" });
   }
 
   return (
