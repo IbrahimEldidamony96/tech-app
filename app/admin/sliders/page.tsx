@@ -1,13 +1,10 @@
-import { redirect } from "next/navigation";
+import { requireAdminPagePermission } from "@/lib/require-admin-page-permission";
 import { getTranslations } from "next-intl/server";
-import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
 import { getAllSlidersForAdmin } from "@/lib/queries/sliders";
 import { SlidersManager } from "@/components/admin/sliders-manager";
 
 export default async function AdminSlidersPage() {
-  const session = await auth();
-  if (!session?.user || !hasPermission(session.user.role, "marketing:read")) redirect("/");
+  const guardedUser = await requireAdminPagePermission("marketing:read");
 
   const slides = await getAllSlidersForAdmin();
   const t = await getTranslations("AdminSliders");
