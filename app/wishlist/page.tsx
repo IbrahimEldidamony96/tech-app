@@ -5,6 +5,7 @@ import { getWishlistForUser } from "@/lib/queries/wishlist";
 import { localized } from "@/lib/locale";
 import { WishlistItems } from "@/components/wishlist-items";
 import type { AppLocale } from "@/i18n/request";
+import { effectiveVariantPrice } from "@/lib/product-pricing";
 
 export default async function WishlistPage() {
   const session = await auth();
@@ -24,7 +25,7 @@ export default async function WishlistPage() {
       slug: item.product.slug,
       isActive: item.product.isActive,
       image: item.product.images[0]?.url ?? null,
-      price: item.product.variants[0]?.price.toNumber() ?? null,
+      price: item.product.variants[0] ? effectiveVariantPrice(item.product.variants[0]).toNumber() : null,
       stock: item.product.variants[0]?.stock ?? 0,
     },
   }));

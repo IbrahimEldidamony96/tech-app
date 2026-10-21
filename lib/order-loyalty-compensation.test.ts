@@ -18,15 +18,17 @@ function fakeTx(refundAmount: number) {
     { id: "referral1", userId: "buyer", type: "REFERRAL", points: 50, referenceType: "FIRST_DELIVERED_ORDER", referenceId: "order" },
     { id: "referral2", userId: "referrer", type: "REFERRAL", points: 100, referenceType: "REFERRED_ORDER", referenceId: "order" },
   ];
-  const matches = (row: Entry, where: Record<string, any>) =>
-    Object.entries(where).every(([k, v]) =>
-      v && typeof v === "object" && "in" in v
-        ? (v.in as unknown[]).includes((row as any)[k])
-        : v && typeof v === "object" && "gt" in v
-          ? Number((row as any)[k]) > Number(v.gt)
-          : (row as any)[k] === v,
-    );
+  const matches = (row: Entry, where: Record<string, unknown>) =>
+    Object.entries(where).every(([key, filter]) => {
+      const value = row[key as keyof Entry];
+      if (filter && typeof filter === "object") {
+        if ("in" in filter && Array.isArray(filter.in)) return filter.in.includes(value);
+        if ("gt" in filter) return Number(value) > Number(filter.gt);
+      }
+      return value === filter;
+    });
   const tx = {
+    returnItem: { findMany: async () => [] },
     order: {
       findUniqueOrThrow: async () => ({
         userId: "buyer", subtotal: d(100), discount: d(0), total: d(100), loyaltyPointsRedeemed: 20,
@@ -36,14 +38,14 @@ function fakeTx(refundAmount: number) {
       aggregate: async () => ({ _sum: { amount: d(refundAmount) } }),
     },
     loyaltyTransaction: {
-      aggregate: async ({ where }: { where: Record<string, any> }) => ({
+      aggregate: async ({ where }: { where: Record<string, unknown> }) => ({
         _sum: { points: entries.filter((entry) => matches(entry, where)).reduce((sum, entry) => sum + entry.points, 0) || null },
       }),
-      findMany: async ({ where }: { where: Record<string, any> }) =>
+      findMany: async ({ where }: { where: Record<string, unknown> }) =>
         entries.filter((entry) => matches(entry, where)),
       findUnique: async ({ where }: { where: { idempotencyKey: string } }) =>
         entries.find((entry) => entry.idempotencyKey === where.idempotencyKey) ?? null,
-      create: async ({ data }: { data: any }) => {
+      create: async ({ data }: { data: Omit<Entry, "id"> }) => {
         if (data.idempotencyKey && entries.some((x) => x.idempotencyKey === data.idempotencyKey)) {
           throw new Error("Duplicate idempotency key");
         }

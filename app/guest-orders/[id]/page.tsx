@@ -45,6 +45,10 @@ async function readGuestOrder(id: string, token?: string): Promise<GuestOrder> {
 
 export default function GuestOrderPage() {
   const { id } = useParams<{ id: string }>();
+  return <GuestOrderDetails key={id} id={id} />;
+}
+
+function GuestOrderDetails({ id }: { id: string }) {
   const [order, setOrder] = useState<GuestOrder | null>(null);
   const [token, setToken] = useState("");
   const [working, setWorking] = useState(true);
@@ -82,7 +86,6 @@ export default function GuestOrderPage() {
       initial.current.token = "";
       initial.current.promise = readGuestOrder(id, oneTimeToken || undefined);
     }
-    setWorking(true);
     initial.current.promise
       .then(data => { if (!cancelled) { setOrder(data); setError(""); } })
       .catch(e => {

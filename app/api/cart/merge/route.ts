@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { withLockedCart } from "@/lib/cart";
 import { requireUser } from "@/lib/require-user";
 import { mergeCartSchema } from "@/lib/validations/cart";
 
@@ -16,13 +16,7 @@ export async function POST(request: NextRequest) {
   }
 
   const userId = session!.user.id;
-  const result = await prisma.$transaction(async (tx) => {
-    const cart = await tx.cart.upsert({
-      where: { userId },
-      create: { userId },
-      update: { abandonedReminderSentAt: null },
-      select: { id: true },
-    });
+  const result = await withLockedCart(userId, async (tx, cartId) => {
     const variantIds = parsed.data.items.map((item) => item.variantId);
     const [variants, existingItems] = await Promise.all([
       tx.productVariant.findMany({
@@ -35,7 +29,7 @@ export async function POST(request: NextRequest) {
         },
       }),
       tx.cartItem.findMany({
-        where: { cartId: cart.id, variantId: { in: variantIds } },
+        where: { cartId, variantId: { in: variantIds } },
         select: { id: true, variantId: true, quantity: true },
       }),
     ]);
@@ -56,11 +50,12 @@ export async function POST(request: NextRequest) {
       if (existing) {
         await tx.cartItem.update({ where: { id: existing.id }, data: { quantity } });
       } else {
-        await tx.cartItem.create({ data: { cartId: cart.id, variantId: item.variantId, quantity } });
+        await tx.cartItem.create({ data: { cartId, variantId: item.variantId, quantity } });
       }
       merged++;
     }
 
+    await tx.cart.update({ where: { id: cartId }, data: { abandonedReminderSentAt: null } });
     return { merged, skipped };
   });
 

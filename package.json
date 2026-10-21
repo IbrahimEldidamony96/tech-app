@@ -8,7 +8,11 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "prisma generate && tsc --noEmit",
+    "typecheck": "prisma generate && next typegen && tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "test:db": "node scripts/run-database-tests.mjs",
+    "check:config": "tsx scripts/check-config.ts",
+    "db:deploy": "prisma migrate deploy",
     "test:seed": "tsx --test prisma/seed.test.ts",
     "test:guest-orders": "tsx --test lib/guest-order-access.test.ts",
     "test:checkout": "tsx --test lib/bundle-discount.test.ts",
@@ -50,6 +54,9 @@
     "typescript": "^5.9.3"
   },
   "overrides": {
+    "@next/eslint-plugin-next": {
+      "fast-glob": "npm:tinyglobby@0.2.15"
+    },
     "@prisma/config": {
       "deepmerge-ts": "8.0.2"
     },

@@ -4,7 +4,7 @@ import { getAllSlidersForAdmin } from "@/lib/queries/sliders";
 import { SlidersManager } from "@/components/admin/sliders-manager";
 
 export default async function AdminSlidersPage() {
-  const guardedUser = await requireAdminPagePermission("marketing:read");
+  await requireAdminPagePermission("marketing:read");
 
   const slides = await getAllSlidersForAdmin();
   const t = await getTranslations("AdminSliders");

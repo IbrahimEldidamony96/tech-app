@@ -4,29 +4,33 @@ import { useRouter } from "next/navigation";
 
 type Refund = { status: "PENDING_CONFIRMATION" | "CONFIRMED"; amount: string | number };
 export function ReturnRefundActions({
-  id, current, refund, paymentMethod, canConfirm,
+  id, current, refund, paymentMethod, canConfirm, scope = "return",
 }: {
   id: string;
   current: string;
   refund: Refund | null;
   paymentMethod?: string | null;
   canConfirm: boolean;
+  scope?: "return" | "order";
 }) {
   const [amount, setAmount] = useState("");
   const [evidenceReference, setEvidenceReference] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [noTransferMade, setNoTransferMade] = useState(false);
   const router = useRouter();
   const isManual = paymentMethod === "CASH_ON_DELIVERY";
-  if (current !== "RECEIVED" && current !== "REFUNDED") return null;
+  if (current !== "RECEIVED" && current !== "REFUNDED" && !(scope === "order" && current === "CANCELLED")) return null;
+  if (current === "REFUNDED" && !refund) return <p className="mt-3 text-sm">Return completed. Redeemed points were restored; no cash refund was due.</p>;
   if (refund?.status === "CONFIRMED") {
     return <p className="mt-3 text-sm font-medium">Refund confirmed: EGP {String(refund.amount)}</p>;
   }
-  const submit = async (method: "POST" | "PATCH", payload: object) => {
+  const submit = async (method: "POST" | "PATCH" | "DELETE", payload: object) => {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/admin/returns/${id}/refund`, {
+      const response = await fetch(`/api/admin/${scope === "order" ? "orders" : "returns"}/${id}/refund`, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -65,6 +69,15 @@ export function ReturnRefundActions({
       onClick={() => void submit("PATCH", { evidenceReference })}>
       {isManual ? "Confirm manual settlement" : "Verify Paymob and confirm"}
     </button> : <p className="text-xs text-steel">An administrator must confirm the settlement.</p>}
+    {canConfirm && <div className="space-y-2 border-t border-steel/20 pt-3">
+      <label className="block text-xs">Reason for cancelling this unexecuted refund
+        <input value={cancellationReason} onChange={e => setCancellationReason(e.target.value)} maxLength={500} className="mt-1 w-full rounded border border-steel/30 p-2 text-sm" />
+      </label>
+      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={noTransferMade} onChange={e => setNoTransferMade(e.target.checked)} />I have verified that no transfer was made.</label>
+      <button disabled={busy || !noTransferMade || cancellationReason.trim().length < 8}
+        onClick={() => void submit("DELETE", { reason: cancellationReason, noTransferMade })}
+        className="rounded border border-steel/30 px-3 py-2 text-xs disabled:opacity-50">Cancel refund request</button>
+    </div>}
     {error && <p className="text-xs text-alert" role="alert">{error}</p>}
   </div>;
 }

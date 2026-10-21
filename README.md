@@ -47,8 +47,8 @@ cp env.example .env
 # 3. Generate the Prisma client (required — app/generated/prisma is gitignored)
 npx prisma generate
 
-# 4. Run migrations against your database
-npx prisma migrate dev
+# 4. Apply the checked-in migrations before running the application
+npm run db:deploy
 
 # 5. Seed demo data (optional but recommended)
 npx prisma db seed
@@ -58,6 +58,44 @@ npm run dev
 ```
 
 App runs at `http://localhost:3000`.
+
+Keep `APP_URL` set to the application's public origin. Local Auth.js uses
+`AUTH_TRUST_HOST=true`; hosted deployments must forward trusted host headers.
+`npm run check:config` reports service readiness without printing credentials.
+Cash on delivery remains available when Paymob is incomplete. Card and wallet
+checkout each require their own integration ID plus `PAYMOB_SECRET_KEY`,
+`PAYMOB_PUBLIC_KEY`, `PAYMOB_HMAC_SECRET`, and `PAYMOB_API_KEY`. The API key is
+used for authenticated, read-only transaction/refund verification. Email needs
+both `RESEND_API_KEY` and a verified `RESEND_FROM_EMAIL` address.
+
+## Validation and database regression tests
+
+Run `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build`.
+`npm run test:db` additionally exercises authenticated production HTTP routes,
+concurrent inventory/order changes, sale-price SQL, points returns, and refund
+reconciliation against PostgreSQL and a local payment-provider mock.
+
+For database tests, set `TEST_DATABASE_URL` to an isolated PostgreSQL endpoint,
+apply migrations there, and build first. A gitignored `.env.audit` can hold this
+setting locally. The test runner rejects the application endpoint from `.env`
+and never falls back to `DATABASE_URL`. Test rows are synthetic and cleaned up
+by their exact IDs. CI provisions fresh PostgreSQL, applies the entire migration
+history, builds, and runs the same suite.
+Use `npm run test:db -- --test-name-pattern="points"` to select a regression.
+Remote database transactions allow 10 seconds to acquire a connection and
+15 seconds to execute by default; individual operations may set stricter limits.
+
+Refund requests reserve an amount before an operator settles it externally.
+Administrators confirm settlement using Paymob inquiry or a manual COD receipt.
+An unexecuted request can be cancelled with a reason and an explicit no-transfer
+attestation; its ledger history remains. Cancelled paid orders have an order-level
+refund for the full remaining payment. Received returns restore points even
+when no cash refund is due. Dispatched shipments must return before restocking;
+carrier cancellation failures preserve the local order and reserved inventory.
+
+The scoped ESLint override replaces the Next plugin's vulnerable `fast-glob`
+dependency with `tinyglobby`. A regression test checks the plugin's real
+`getRootDirs` glob behavior; the override does not affect application runtime.
 
 Use the two connection strings for the same Neon branch. The application URL is
 pooled for serverless traffic; the Prisma CLI URL is direct because schema

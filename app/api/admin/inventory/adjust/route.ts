@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/require-permission";
 import { writeAuditLog } from "@/lib/audit";
+import { notifyStockAvailable } from "@/lib/stock-alerts";
 
 const schema = z.object({
   variantId: z.string().min(1),
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
       summary: `Inventory adjusted for ${variant.sku} by ${delta}`,
       metadata: { delta, stockAfter: variant.stock, note },
     });
+    if (delta > 0) await notifyStockAvailable(tx, variantId);
     return variant;
   }).catch((error) => {
     if (error instanceof Error && error.message === "INSUFFICIENT_STOCK_OR_NOT_FOUND") return null;

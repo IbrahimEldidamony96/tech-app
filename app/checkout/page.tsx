@@ -7,6 +7,7 @@ import { localized } from "@/lib/locale";
 import { CheckoutForm } from "@/components/checkout-form";
 import { GuestCartHandoff } from "@/components/guest-cart-handoff";
 import type { AppLocale } from "@/i18n/request";
+import { availablePaymentMethods } from "@/lib/payment-configuration";
 
 export default async function CheckoutPage() {
   const session = await auth();
@@ -40,7 +41,7 @@ export default async function CheckoutPage() {
       <h1 className="page-heading mt-3">{t("title")}</h1>
       <p className="mt-3 max-w-xl text-sm leading-6 text-steel">{store("checkoutDescription")}</p>
       <GuestCartHandoff hasServerItems={items.length > 0}>
-        <CheckoutForm items={items} subtotal={cart.subtotal} addresses={addresses} loyaltyPoints={user?.loyaltyPoints ?? 0} />
+        <CheckoutForm items={items} subtotal={cart.subtotal} addresses={addresses} loyaltyPoints={user?.loyaltyPoints ?? 0} paymentMethods={availablePaymentMethods()} />
       </GuestCartHandoff>
     </div>
   );

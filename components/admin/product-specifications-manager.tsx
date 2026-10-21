@@ -11,7 +11,7 @@ export function ProductSpecificationsManager({ productId, initialSpecifications 
   function update(i: number, patch: Partial<Spec>) { setSpecs((prev) => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s)); }
   async function save() {
     setSaving(true); setMessage("");
-    const res = await fetch(`/api/products/${productId}/specifications`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ specifications: specs.map(({ id: _id, ...s }) => s) }) });
+    const res = await fetch(`/api/products/${productId}/specifications`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ specifications: specs.map(({ keyEn, keyAr, valueEn, valueAr, isFilterable, sortOrder }) => ({ keyEn, keyAr, valueEn, valueAr, isFilterable, sortOrder })) }) });
     setSaving(false);
     if (!res.ok) { setMessage((await res.json().catch(() => ({}))).error ?? "Save failed"); return; }
     const body = await res.json(); setSpecs(body.data); setMessage("Specifications saved");

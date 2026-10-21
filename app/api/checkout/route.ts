@@ -18,8 +18,10 @@ import { computeShippingCost, DEFAULT_SHIPPING_FEE } from "@/lib/shipping-cost";
 import { getAppOrigin } from "@/lib/app-url";
 import { effectiveVariantPrice } from "@/lib/product-pricing";
 import { calculateBundleDiscount } from "@/lib/bundle-discount";
+import { eligibleCouponSubtotal } from "@/lib/coupon-eligibility";
 import { changeLoyaltyPoints } from "@/lib/loyalty";
 import { createNotification } from "@/lib/notifications";
+import { availablePaymentMethods } from "@/lib/payment-configuration";
 
 export async function POST(request: NextRequest) {
   const { session, error } = await requireUser();
@@ -42,6 +44,9 @@ export async function POST(request: NextRequest) {
   }
 
   const { addressId, couponCode, paymentMethod, customerNote, loyaltyPointsToRedeem, checkoutKey } = parsed.data;
+  if (!availablePaymentMethods().includes(paymentMethod)) {
+    return NextResponse.json({ error: "This payment method is currently unavailable. Please choose another method." }, { status: 503 });
+  }
 
   // *** فحص ملكية العنوان — نفس مبدأ IDOR من Phase 4 ***
   const address = await prisma.address.findUnique({ where: { id: addressId } });
@@ -229,9 +234,7 @@ export async function POST(request: NextRequest) {
             if (previousOrders > 0) throw new CheckoutError("INVALID_COUPON", "Coupon is for first orders only");
           }
 
-          let couponBase = subtotal;
-          if (coupon.categoryId) couponBase = pricedItems.filter((i) => i.categoryId === coupon.categoryId).reduce((sum, i) => sum.add(i.lineTotal), new Prisma.Decimal(0));
-          if (coupon.brandId) couponBase = pricedItems.filter((i) => i.brandId === coupon.brandId).reduce((sum, i) => sum.add(i.lineTotal), new Prisma.Decimal(0));
+          const couponBase = eligibleCouponSubtotal(pricedItems, coupon);
           if (couponBase.lte(0)) throw new CheckoutError("INVALID_COUPON", "Coupon does not apply to items in this cart");
           if (coupon.minOrderAmount && couponBase.lt(coupon.minOrderAmount)) {
             throw new CheckoutError("INVALID_COUPON", "Eligible items are below the coupon minimum");

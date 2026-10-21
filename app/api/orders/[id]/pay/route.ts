@@ -7,6 +7,7 @@ import {
   PaymobApiError,
 } from "@/lib/paymob";
 import { getAppOrigin } from "@/lib/app-url";
+import { availablePaymentMethods } from "@/lib/payment-configuration";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -33,7 +34,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       { status: 409 },
     );
   }
-  if (order.payment.status !== "PENDING") {
+  if (order.payment.status !== "PENDING" || order.status === "CANCELLED") {
     return NextResponse.json(
       { error: `Payment already ${order.payment.status.toLowerCase()}` },
       { status: 409 },
@@ -44,6 +45,10 @@ export async function POST(_request: NextRequest, { params }: Params) {
     order.payment.method === "CARD"
       ? process.env.PAYMOB_INTEGRATION_ID_CARD
       : process.env.PAYMOB_INTEGRATION_ID_WALLET;
+
+  if (!availablePaymentMethods().includes(order.payment.method)) {
+    return NextResponse.json({ error: "Online payment is currently unavailable" }, { status: 503 });
+  }
 
   if (!integrationId) {
     return NextResponse.json(

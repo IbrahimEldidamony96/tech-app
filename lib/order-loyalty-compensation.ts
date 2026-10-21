@@ -33,8 +33,16 @@ export async function compensateOrderLoyalty(
     ? merchantNet
     : refunds._sum.amount ?? new Prisma.Decimal(0);
 
+  const received = await tx.returnItem.findMany({
+    where: { returnRequest: { orderId, status: { in: ["RECEIVED", "REFUNDED"] } } },
+    select: { quantity: true, orderItem: { select: { quantity: true, totalPrice: true } } },
+  });
+  const receivedGross = Prisma.Decimal.min(order.subtotal, received.reduce((sum, item) =>
+    sum.add(item.orderItem.totalPrice.mul(item.quantity).div(item.orderItem.quantity)), new Prisma.Decimal(0)));
+
   const fullyReturned = options.returnedShipment ||
-    (merchantNet.gt(0) && refunded.gte(merchantNet));
+    (merchantNet.gt(0) && refunded.gte(merchantNet)) ||
+    (order.subtotal.gt(0) && receivedGross.gte(order.subtotal));
 
   const earned = await tx.loyaltyTransaction.aggregate({
     where: { userId: order.userId, type: "EARN", referenceType: "ORDER", referenceId: orderId },
@@ -43,7 +51,7 @@ export async function compensateOrderLoyalty(
   const originallyEarned = Math.max(0, earned._sum.points ?? 0);
   const earnTarget = fullyReturned
     ? originallyEarned
-    : proratedPoints(originallyEarned, refunded, order.total);
+    : Math.max(proratedPoints(originallyEarned, refunded, order.total), proratedPoints(originallyEarned, receivedGross, order.subtotal));
 
   const earnReversed = await tx.loyaltyTransaction.aggregate({
     where: { userId: order.userId, referenceType: "ORDER_EARN_REVERSAL", referenceId: orderId },
@@ -65,10 +73,10 @@ export async function compensateOrderLoyalty(
 
   const restorationTarget = fullyReturned
     ? order.loyaltyPointsRedeemed
-    : proratedPoints(order.loyaltyPointsRedeemed, refunded, merchantNet);
+    : Math.max(proratedPoints(order.loyaltyPointsRedeemed, refunded, merchantNet), proratedPoints(order.loyaltyPointsRedeemed, receivedGross, order.subtotal));
 
   const restored = await tx.loyaltyTransaction.aggregate({
-    where: { userId: order.userId, type: "REFUND", referenceType: "ORDER_REDEMPTION_RESTORE", referenceId: orderId },
+    where: { userId: order.userId, type: "REFUND", referenceType: { in: ["ORDER_REDEMPTION_RESTORE", "ORDER"] }, referenceId: orderId },
     _sum: { points: true },
   });
   const restoreDelta = restorationTarget - (restored._sum.points ?? 0);

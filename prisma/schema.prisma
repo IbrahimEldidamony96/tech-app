@@ -45,6 +45,7 @@ enum PaymentStatus {
 enum RefundStatus {
   PENDING_CONFIRMATION
   CONFIRMED
+  CANCELLED
 }
 
 enum PaymentMethod {
@@ -878,7 +879,7 @@ model ReturnRequest {
   adminNote String?
   refundAmount Decimal?
   items ReturnItem[]
-  refund Refund?
+  refunds Refund[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -887,14 +888,14 @@ model ReturnRequest {
   @@index([status])
 }
 
-// Every return has at most one refund allocation. An intent cannot be
-// mistaken for money returned; only CONFIRMED rows contribute to accounting.
+// Cancelled requests remain in the ledger. Partial unique indexes in the
+// migration allow only one non-cancelled allocation per return/order scope.
 model Refund {
   id String @id @default(cuid())
   orderId String
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  returnRequestId String @unique
-  returnRequest ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Restrict)
+  returnRequestId String?
+  returnRequest ReturnRequest? @relation(fields: [returnRequestId], references: [id], onDelete: Restrict)
   paymentId String
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   status RefundStatus @default(PENDING_CONFIRMATION)
@@ -904,6 +905,7 @@ model Refund {
   providerBaselineCents Int?
   providerReference String? @unique
   confirmationNote String?
+  cancellationReason String?
   requestedById String
   confirmedById String?
   confirmedAt DateTime?
@@ -912,6 +914,7 @@ model Refund {
 
   @@index([orderId, status])
   @@index([paymentId, status])
+  @@index([returnRequestId])
 }
 
 model ReturnItem {

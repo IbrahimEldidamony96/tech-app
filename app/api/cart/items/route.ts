@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/require-user";
-import { getOrCreateCart } from "@/lib/cart";
+import { withLockedCart } from "@/lib/cart";
 import { addToCartSchema } from "@/lib/validations/cart";
 
 export async function POST(request: NextRequest) {
@@ -25,45 +24,25 @@ export async function POST(request: NextRequest) {
 
   const { variantId, quantity } = parsed.data;
 
-  const variant = await prisma.productVariant.findUnique({
-    where: { id: variantId },
-    select: { id: true, stock: true, isActive: true, product: { select: { isActive: true } } },
+  return withLockedCart(session!.user.id, async (tx, cartId) => {
+    const variant = await tx.productVariant.findUnique({
+      where: { id: variantId },
+      select: { stock: true, isActive: true, product: { select: { isActive: true, deletedAt: true } } },
+    });
+    if (!variant) return NextResponse.json({ error: "Variant not found" }, { status: 404 });
+    if (!variant.isActive || !variant.product.isActive || variant.product.deletedAt) {
+      return NextResponse.json({ error: "This product is no longer available" }, { status: 400 });
+    }
+    // This stock cap is advisory. Checkout reserves inventory atomically.
+    const existing = await tx.cartItem.findUnique({ where: { cartId_variantId: { cartId, variantId } } });
+    const quantityToSave = Math.min((existing?.quantity ?? 0) + quantity, 10, variant.stock);
+    if (quantityToSave <= 0) return NextResponse.json({ error: "Out of stock" }, { status: 400 });
+    const item = await tx.cartItem.upsert({
+      where: { cartId_variantId: { cartId, variantId } },
+      create: { cartId, variantId, quantity: quantityToSave }, update: { quantity: quantityToSave },
+      select: { id: true, quantity: true, variantId: true },
+    });
+    await tx.cart.update({ where: { id: cartId }, data: { abandonedReminderSentAt: null } });
+    return NextResponse.json({ data: item }, { status: existing ? 200 : 201 });
   });
-
-  if (!variant) {
-    return NextResponse.json({ error: "Variant not found" }, { status: 404 });
-  }
-  if (!variant.isActive || !variant.product.isActive) {
-    return NextResponse.json({ error: "This product is no longer available" }, { status: 400 });
-  }
-
-  const cart = await getOrCreateCart(session!.user.id);
-
-  // ⚠️ الفحص ده استرشادي بس (UX)، مش نقطة إنفاذ فعلية ضد الـ overselling.
-  // الفحص الحقيقي بـ row locking/transaction بيحصل وقت الـ checkout
-  // (Phase 5) — هنا بنمنع بس تجربة استخدام سيئة زي إنك تضيف كمية
-  // أكبر من المتاح وانت لسه بتتصفح، مش أكتر.
-  const existing = await prisma.cartItem.findUnique({
-    where: { cartId_variantId: { cartId: cart.id, variantId } },
-  });
-
-  const desiredQuantity = Math.min((existing?.quantity ?? 0) + quantity, 10, variant.stock);
-
-  if (variant.stock === 0 || desiredQuantity <= 0) {
-    return NextResponse.json({ error: "Out of stock" }, { status: 400 });
-  }
-
-  const cartItem = existing
-    ? await prisma.cartItem.update({
-        where: { id: existing.id },
-        data: { quantity: desiredQuantity },
-        select: { id: true, quantity: true, variantId: true },
-      })
-    : await prisma.cartItem.create({
-        data: { cartId: cart.id, variantId, quantity: desiredQuantity },
-        select: { id: true, quantity: true, variantId: true },
-      });
-
-  await prisma.cart.update({ where: { id: cart.id }, data: { abandonedReminderSentAt: null } });
-  return NextResponse.json({ data: cartItem }, { status: existing ? 200 : 201 });
 }

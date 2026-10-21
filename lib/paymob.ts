@@ -160,7 +160,7 @@ export function verifyPaymobTransactionHmac(
 // Refund reconciliation deliberately uses a READ-ONLY provider inquiry.
 // Funds are initiated by an explicitly authorized operator in Paymob's
 // dashboard; this application does not issue refund POST requests.
-// Paymob's transaction-inquiry API uses a short-lived Bearer token obtained
+// Paymob's transaction-inquiry API uses a short-lived token obtained
 // from the merchant API key (not the Intention SECRET_KEY).
 export type PaymobRefundSnapshot = {
   transactionId: string;
@@ -193,14 +193,10 @@ export function validatePaymobRefundInquiry(
   };
 }
 
-export async function inquirePaymobRefund(input: {
-  transactionId: string;
-  orderId: string;
-  amountCents: number;
-}): Promise<PaymobRefundSnapshot> {
+export async function inquirePaymobTransaction(transactionId: string): Promise<Record<string, unknown>> {
   const apiKey = process.env.PAYMOB_API_KEY;
   if (!apiKey) throw new PaymobApiError("PAYMOB_API_KEY is missing (refund reconciliation disabled)", 503);
-  if (!/^\d+$/.test(input.transactionId)) throw new PaymobApiError("Invalid payment transaction ID", 400);
+  if (!/^\d+$/.test(transactionId)) throw new PaymobApiError("Invalid payment transaction ID", 400);
 
   let tokenResponse: Response;
   try {
@@ -220,8 +216,8 @@ export async function inquirePaymobRefund(input: {
   }
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}/api/acceptance/transactions/${input.transactionId}`, {
-      headers: { Authorization: `Bearer ${tokenJson.token}` },
+    const query = new URLSearchParams({ token: tokenJson.token });
+    response = await fetch(`${BASE_URL}/api/acceptance/transactions/${transactionId}?${query}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
@@ -233,5 +229,32 @@ export async function inquirePaymobRefund(input: {
   if (!json || typeof json !== "object" || Array.isArray(json)) {
     throw new PaymobApiError("Invalid Paymob transaction inquiry", 502);
   }
-  return validatePaymobRefundInquiry(json as Record<string, unknown>, input);
+  return json as Record<string, unknown>;
+}
+
+export async function inquirePaymobRefund(input: {
+  transactionId: string; orderId: string; amountCents: number;
+}): Promise<PaymobRefundSnapshot> {
+  return validatePaymobRefundInquiry(await inquirePaymobTransaction(input.transactionId), input);
+}
+
+/** Only an authenticated inquiry can bind an unsigned merchant reference. */
+export function verifiedPaymobCapture(callback: Record<string, unknown>, remote: Record<string, unknown>) {
+  const remoteOrder = remote.order as Record<string, unknown> | null;
+  const callbackOrder = callback.order as Record<string, unknown> | null;
+  const orderId = remoteOrder?.merchant_order_id;
+  if (typeof orderId !== "string" || !orderId ||
+      String(remote.id) !== String(callback.id) ||
+      !remoteOrder?.id || String(remoteOrder.id) !== String(callbackOrder?.id) ||
+      (callbackOrder?.merchant_order_id !== undefined && callbackOrder.merchant_order_id !== orderId) ||
+      Number(remote.amount_cents) !== Number(callback.amount_cents) ||
+      !Number.isSafeInteger(Number(remote.amount_cents)) || Number(remote.amount_cents) <= 0 ||
+      remote.currency !== "EGP" || callback.currency !== "EGP" ||
+      String(remote.integration_id) !== String(callback.integration_id) ||
+      remote.success !== true || remote.pending !== false ||
+      remote.is_refunded === true || remote.is_voided === true ||
+      (remote.is_auth === true && remote.is_capture !== true)) {
+    throw new PaymobApiError("Payment inquiry does not match a captured transaction", 409);
+  }
+  return { orderId, transactionId: String(remote.id), amountCents: Number(remote.amount_cents), integrationId: String(remote.integration_id) };
 }

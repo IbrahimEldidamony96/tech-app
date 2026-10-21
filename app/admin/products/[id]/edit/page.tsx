@@ -14,7 +14,7 @@ import type { AppLocale } from "@/i18n/request";
 type Params = Promise<{ id: string }>;
 
 export default async function EditProductPage({ params }: { params: Params }) {
-  const guardedUser = await requireAdminPagePermission("catalog:write");
+  await requireAdminPagePermission("catalog:write");
 
   const { id } = await params;
 

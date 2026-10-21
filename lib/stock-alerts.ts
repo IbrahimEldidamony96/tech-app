@@ -12,9 +12,14 @@ export async function notifyStockAvailable(tx: Tx, variantId: string) {
   const alerts = await tx.stockAlert.findMany({
     where: { productId: variant.product.id, notifiedAt: null },
     select: { id: true, userId: true },
+    orderBy: { id: "asc" },
   });
   if (!alerts.length) return;
   for (const alert of alerts) {
+    const claimed = await tx.stockAlert.updateMany({
+      where: { id: alert.id, notifiedAt: null }, data: { notifiedAt: new Date() },
+    });
+    if (claimed.count !== 1) continue;
     await createNotification(tx, {
       userId: alert.userId,
       type: "STOCK",
@@ -23,8 +28,4 @@ export async function notifyStockAvailable(tx: Tx, variantId: string) {
       link: `/products/${variant.product.slug}`,
     });
   }
-  await tx.stockAlert.updateMany({
-    where: { id: { in: alerts.map((a) => a.id) }, notifiedAt: null },
-    data: { notifiedAt: new Date() },
-  });
 }

@@ -38,7 +38,7 @@ export default {
     // الكاملة. من غيرها، الـ Header يقدر يشوف role الأدمن لكن proxy.ts
     // (اللي بيمنع دخول /admin) يشوفه CUSTOMER عادي — بالظبط الباج اللي حصل.
     async jwt({ token, user, trigger, session }) {
-      if (user) {
+      if (user?.id) {
         token.id = user.id;
         token.role =
           (user as { role?: "CUSTOMER" | "SUPPORT" | "PRODUCT_MANAGER" | "ORDER_MANAGER" | "ADMIN" | "SUPER_ADMIN" }).role ?? "CUSTOMER";

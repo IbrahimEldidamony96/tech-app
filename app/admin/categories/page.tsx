@@ -5,7 +5,7 @@ import { CategoriesManager } from "@/components/admin/categories-manager";
 import type { AppLocale } from "@/i18n/request";
 
 export default async function AdminCategoriesPage() {
-  const guardedUser = await requireAdminPagePermission("catalog:read");
+  await requireAdminPagePermission("catalog:read");
 
   const categories = await getAllCategoriesForAdmin();
   const parentOptions = categories.map((c) => ({ id: c.id, nameEn: c.nameEn, nameAr: c.nameAr }));

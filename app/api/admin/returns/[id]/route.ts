@@ -6,6 +6,8 @@ import { createNotification } from "@/lib/notifications";
 import { notifyStockAvailable } from "@/lib/stock-alerts";
 import { writeAuditLog } from "@/lib/audit";
 import { returnQuantityConflict } from "@/lib/return-quantities";
+import { compensateOrderLoyalty } from "@/lib/order-loyalty-compensation";
+import { maximumReturnRefund } from "@/lib/refund-accounting";
 
 const schema = z.object({
   status: z.enum(["APPROVED", "REJECTED", "RECEIVED"]),
@@ -40,12 +42,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const rr = await tx.returnRequest.findUnique({
       where: { id },
       include: {
-        items: true,
+        items: { include: { orderItem: { select: { quantity: true, totalPrice: true } } } },
         order: {
           select: {
             paymentStatus: true,
             status: true,
             userId: true,
+            subtotal: true,
+            discount: true,
+            total: true,
             items: { select: { id: true, quantity: true, productName: true } },
           },
         },
@@ -78,7 +83,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const conflict = returnQuantityConflict(rr.items, rr.order.items, restored);
       if (conflict) return { kind: "excess" as const };
 
-      for (const item of rr.items) {
+      for (const item of [...rr.items].sort((a, b) => a.variantId.localeCompare(b.variantId))) {
         const variant = await tx.productVariant.update({
           where: { id: item.variantId },
           data: { stock: { increment: item.quantity } },
@@ -99,13 +104,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
+    const pointsOnly = parsed.data.status === "RECEIVED" && maximumReturnRefund(rr.order, rr.items).isZero();
     const updated = await tx.returnRequest.update({
       where: { id },
       data: {
-        status: parsed.data.status,
+        status: pointsOnly ? "REFUNDED" : parsed.data.status,
+        ...(pointsOnly ? { refundAmount: 0 } : {}),
         adminNote: parsed.data.adminNote,
       },
     });
+    if (parsed.data.status === "RECEIVED") await compensateOrderLoyalty(tx, rr.orderId);
     await createNotification(tx, {
       userId: rr.userId,
       type: "ORDER",
@@ -121,7 +129,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       summary: `Return ${id}: ${rr.status} -> ${parsed.data.status}`,
     });
     return { kind: "ok" as const, updated };
-  });
+  }, { timeout: 15000 });
 
   if (result.kind === "missing") return NextResponse.json({ error: "Return request not found" }, { status: 404 });
   if (result.kind === "invalid") {

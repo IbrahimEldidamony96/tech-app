@@ -24,23 +24,32 @@ export function VariantsManager({ productId, options, variants, setVariants, loc
 
   async function updateVariant(id: string, data: Record<string, unknown>) {
     setSavingId(id); setError("");
+    try {
     const res = await fetch(`/api/products/${productId}/variants/${id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data) });
     if (res.ok) {
       const body = await res.json(); const d = body.data;
       setVariants(prev=>prev.map(v=>v.id===id?{...v,...d,price:Number(d.price),salePrice:d.salePrice==null?null:Number(d.salePrice),saleStartsAt:d.saleStartsAt??null,saleEndsAt:d.saleEndsAt??null}:v));
     } else setError((await res.json().catch(()=>({}))).error ?? "Update failed");
-    setSavingId(null);
+    } catch {
+      setError("Could not contact the server. Try again.");
+    } finally {
+      setSavingId(null);
+    }
   }
 
   async function addVariant(e: React.FormEvent) {
     e.preventDefault(); setError("");
     if (options.length>0 && !options.every(o=>!!selectedValues[o.id])) { setError(t("selectValueForEveryOption")); return; }
+    try {
     const res=await fetch(`/api/products/${productId}/variants`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sku:newVariant.sku,price:Number(newVariant.price),stock:Number(newVariant.stock),optionValueIds:Object.values(selectedValues)})});
     if(!res.ok){setError((await res.json().catch(()=>({}))).error??t("addFailed"));return;}
     const body=await res.json();
     const optionSummary=options.map(o=>{const value=o.values.find(v=>v.id===selectedValues[o.id]);return value?localized(locale,value.valueEn,value.valueAr):undefined;}).filter(Boolean).join(" / ");
     setVariants(prev=>[...prev,{id:body.data.id,sku:body.data.sku,price:Number(body.data.price),stock:body.data.stock,isActive:body.data.isActive,optionSummary,salePrice:null,saleStartsAt:null,saleEndsAt:null}]);
     setNewVariant(emptyNew);setSelectedValues({});
+    } catch {
+      setError(t("addFailed"));
+    }
   }
 
   return <div className="mt-8 rounded-lg border border-steel/15 p-4">
@@ -50,7 +59,7 @@ export function VariantsManager({ productId, options, variants, setVariants, loc
         <div className="grid gap-2 sm:grid-cols-4">
           <input defaultValue={v.sku} dir="ltr" onBlur={e=>e.target.value!==v.sku&&updateVariant(v.id,{sku:e.target.value})} disabled={savingId===v.id} className="rounded border border-steel/25 px-2 py-1 font-mono text-xs" />
           <input type="number" step="0.01" defaultValue={v.price} onBlur={e=>updateVariant(v.id,{price:Number(e.target.value)})} disabled={savingId===v.id} className="rounded border border-steel/25 px-2 py-1 text-xs" />
-          <input type="number" defaultValue={v.stock} onBlur={e=>updateVariant(v.id,{stock:Number(e.target.value)})} disabled={savingId===v.id} className="rounded border border-steel/25 px-2 py-1 text-xs" />
+          <input type="number" defaultValue={v.stock} onBlur={e=>{if(Number(e.target.value)!==v.stock)void updateVariant(v.id,{stock:Number(e.target.value),expectedStock:v.stock});}} disabled={savingId===v.id} className="rounded border border-steel/25 px-2 py-1 text-xs" />
           <span className="self-center text-xs text-steel">{v.optionSummary||"—"}</span>
         </div>
         <div className="mt-2 grid gap-2 border-t border-steel/10 pt-2 sm:grid-cols-3">

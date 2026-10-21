@@ -24,7 +24,12 @@ if (process.env.VERCEL && !globalForPrisma.pgPool) {
 
 const adapter = new PrismaPg(pgPool);
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  adapter,
+  // Allow remote PostgreSQL connection startup before the transaction begins.
+  // Execution remains bounded; individual operations may choose stricter limits.
+  transactionOptions: { maxWait: 10000, timeout: 15000 },
+});
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.pgPool = pgPool;

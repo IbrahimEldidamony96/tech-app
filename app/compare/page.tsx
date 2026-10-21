@@ -18,6 +18,8 @@ type CompareProduct = {
   variants: { price: string | number; effectivePrice: string | number; stock: number }[];
 };
 
+const EMPTY_PRODUCTS: CompareProduct[] = [];
+
 function subscribeToCompare(onChange: () => void) {
   window.addEventListener("compare-products-changed", onChange);
   window.addEventListener("storage", onChange);
@@ -53,7 +55,7 @@ export default function ComparePage() {
   const [revision, setRevision] = useState(0);
   const requestKey = selection + ":" + revision;
   const [result, setResult] = useState<{ key: string; products: CompareProduct[]; failed: boolean }>({ key: "", products: [], failed: false });
-  const products = result.key === requestKey ? result.products : [];
+  const products = result.key === requestKey ? result.products : EMPTY_PRODUCTS;
   const loading = savedSelection === null || (selection.length > 0 && result.key !== requestKey);
   const failed = selection.length > 0 && result.key === requestKey && result.failed;
 

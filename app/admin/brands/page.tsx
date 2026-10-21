@@ -4,7 +4,7 @@ import { getAllBrandsForAdmin } from "@/lib/queries/admin-brands";
 import { BrandsManager } from "@/components/admin/brands-manager";
 
 export default async function AdminBrandsPage() {
-  const guardedUser = await requireAdminPagePermission("catalog:read");
+  await requireAdminPagePermission("catalog:read");
 
   const brands = await getAllBrandsForAdmin();
   const t = await getTranslations("AdminBrands");

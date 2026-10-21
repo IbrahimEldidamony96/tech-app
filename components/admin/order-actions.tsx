@@ -54,21 +54,23 @@ export function OrderActions({
     setLoading(url);
     setError("");
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    if (!res.ok) {
-      const responseBody = await res.json().catch(() => ({}));
-      setError(responseBody.error ?? t("actionFailed"));
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) {
+        const responseBody = await res.json().catch(() => ({}));
+        setError(responseBody.error ?? t("actionFailed"));
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError(t("actionFailed"));
+    } finally {
       setLoading(null);
-      return;
     }
-
-    router.refresh();
-    setLoading(null);
   }
 
   const isCod = paymentMethod === "CASH_ON_DELIVERY";
@@ -77,7 +79,7 @@ export function OrderActions({
   const canConfirmCod = isCod && orderStatus === "PENDING";
   const canMarkPaid = !isCod && canTransitionPayment(paymentStatus, "PAID");
   const canMarkFailed = !isCod && canTransitionPayment(paymentStatus, "FAILED");
-  const canCancel = canTransitionOrder(orderStatus, "CANCELLED");
+  const canCancel = canTransitionOrder(orderStatus, "CANCELLED") && !["PAID", "PARTIALLY_REFUNDED", "REFUNDED"].includes(paymentStatus);
   const canCreateShipment =
     !shipmentStatus &&
     canTransitionOrder(orderStatus, "PROCESSING") &&

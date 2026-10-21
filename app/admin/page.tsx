@@ -4,11 +4,13 @@ import { requireAdminPagePermission } from "@/lib/require-admin-page-permission"
 import { hasPermission, type Permission } from "@/lib/permissions";
 import { getAdminStats,type RevenueRange } from "@/lib/queries/admin-stats";
 import { RevenueRangeSelect } from "@/components/admin/revenue-range-select";
+import { redirect } from "next/navigation";
 const RANGES:RevenueRange[]=["today","7d","30d"];
 export const dynamic="force-dynamic";
 type SearchParams=Promise<{range?:string}>;
 export default async function AdminHomePage({searchParams}:{searchParams:SearchParams}){
- const guardedUser=await requireAdminPagePermission("analytics:read");
+ const guardedUser=await requireAdminPagePermission(["analytics:read", "orders:read"]);
+ if(!hasPermission(guardedUser.role,"analytics:read"))redirect("/admin/orders");
  const {range}=await searchParams;const revenueRange:RevenueRange=RANGES.includes(range as RevenueRange)?range as RevenueRange:"30d";
  const [t,stats]=await Promise.all([getTranslations("AdminHome"),getAdminStats(revenueRange)]);
  const rangeLabel=t(revenueRange==="today"?"rangeToday":revenueRange==="7d"?"range7d":"range30d");

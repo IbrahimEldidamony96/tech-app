@@ -5,7 +5,7 @@ import { ProductForm } from "@/components/admin/product-form";
 import type { AppLocale } from "@/i18n/request";
 
 export default async function NewProductPage() {
-  const guardedUser = await requireAdminPagePermission("catalog:write");
+  await requireAdminPagePermission("catalog:write");
 
   const [categories, brands] = await Promise.all([
     prisma.category.findMany({ orderBy: { nameEn: "asc" }, select: { id: true, nameEn: true, nameAr: true } }),

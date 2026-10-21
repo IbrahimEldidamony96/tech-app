@@ -11,10 +11,17 @@ export type CouponRow={
  firstOrderOnly:boolean;categoryId:string|null;brandId:string|null;
 };
 type FormState={code:string;type:DiscountType;value:string;minOrderAmount:string;maxDiscount:string;usageLimit:string;usageLimitPerUser:string;startsAt:string;expiresAt:string;isActive:boolean;firstOrderOnly:boolean;categoryId:string;brandId:string};
+type CouponResponse = Omit<CouponRow, "value" | "minOrderAmount" | "maxDiscount" | "startsAt" | "expiresAt"> & {
+ value: string | number;
+ minOrderAmount: string | number | null;
+ maxDiscount: string | number | null;
+ startsAt: string | null;
+ expiresAt: string | null;
+};
 const emptyForm:FormState={code:"",type:"PERCENTAGE",value:"",minOrderAmount:"",maxDiscount:"",usageLimit:"",usageLimitPerUser:"1",startsAt:"",expiresAt:"",isActive:true,firstOrderOnly:false,categoryId:"",brandId:""};
 function toLocal(d:Date|null){if(!d)return"";const p=(n:number)=>String(n).padStart(2,"0");return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`}
 function fromCoupon(c:CouponRow):FormState{return{code:c.code,type:c.type,value:String(c.value),minOrderAmount:c.minOrderAmount==null?"":String(c.minOrderAmount),maxDiscount:c.maxDiscount==null?"":String(c.maxDiscount),usageLimit:c.usageLimit==null?"":String(c.usageLimit),usageLimitPerUser:String(c.usageLimitPerUser),startsAt:toLocal(c.startsAt),expiresAt:toLocal(c.expiresAt),isActive:c.isActive,firstOrderOnly:c.firstOrderOnly,categoryId:c.categoryId??"",brandId:c.brandId??""}}
-function mapResponse(d:any):CouponRow{return{id:d.id,code:d.code,type:d.type,value:Number(d.value),minOrderAmount:d.minOrderAmount==null?null:Number(d.minOrderAmount),maxDiscount:d.maxDiscount==null?null:Number(d.maxDiscount),usageLimit:d.usageLimit,usageLimitPerUser:d.usageLimitPerUser,usedCount:d.usedCount,startsAt:d.startsAt?new Date(d.startsAt):null,expiresAt:d.expiresAt?new Date(d.expiresAt):null,isActive:d.isActive,firstOrderOnly:d.firstOrderOnly,categoryId:d.categoryId,brandId:d.brandId}}
+function mapResponse(d:CouponResponse):CouponRow{return{id:d.id,code:d.code,type:d.type,value:Number(d.value),minOrderAmount:d.minOrderAmount==null?null:Number(d.minOrderAmount),maxDiscount:d.maxDiscount==null?null:Number(d.maxDiscount),usageLimit:d.usageLimit,usageLimitPerUser:d.usageLimitPerUser,usedCount:d.usedCount,startsAt:d.startsAt?new Date(d.startsAt):null,expiresAt:d.expiresAt?new Date(d.expiresAt):null,isActive:d.isActive,firstOrderOnly:d.firstOrderOnly,categoryId:d.categoryId,brandId:d.brandId}}
 
 export function CouponsManager({initialCoupons,categories,brands,canWrite=true}:{initialCoupons:CouponRow[];categories:Choice[];brands:Choice[];canWrite?:boolean}){
  const router=useRouter();const[coupons,setCoupons]=useState(initialCoupons);const[editingId,setEditingId]=useState<string|null>(null);const[adding,setAdding]=useState(false);const[form,setForm]=useState(emptyForm);const[error,setError]=useState("");const[submitting,setSubmitting]=useState(false);

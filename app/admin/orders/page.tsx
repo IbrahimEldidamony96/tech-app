@@ -9,7 +9,7 @@ const STATUSES: OrderStatus[] = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED"
 type SearchParams = Promise<{ status?: string }>;
 
 export default async function AdminOrdersPage({ searchParams }: { searchParams: SearchParams }) {
-  const guardedUser = await requireAdminPagePermission("orders:read");
+  await requireAdminPagePermission("orders:read");
 
   const { status } = await searchParams;
   const orders = await getAllOrders(status as OrderStatus | undefined);

@@ -6,7 +6,7 @@ import { BostaApiError } from "@/lib/bosta";
 import type { AppLocale } from "@/i18n/request";
 
 export default async function AdminShippingRatesPage() {
-  const guardedUser = await requireAdminPagePermission("settings:manage");
+  await requireAdminPagePermission("settings:manage");
 
   const t = await getTranslations("AdminShippingRates");
   const locale = (await getLocale()) as AppLocale;

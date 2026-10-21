@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
+import { getAppOrigin } from "@/lib/app-url";
+import { escapeHtml } from "@/lib/html";
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -16,7 +18,7 @@ export async function GET(request: NextRequest) {
   let sent = 0;
   for (const cart of carts) {
     try {
-      await sendEmail({ to: cart.user.email, subject: "You left items in your Tech Store cart", html: `<p>Hi ${cart.user.name},</p><p>You still have ${cart.items.length} item(s) waiting in your cart.</p><p><a href="${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/cart">Return to your cart</a></p>` });
+      await sendEmail({ to: cart.user.email, subject: "You left items in your Tech Store cart", html: `<p>Hi ${escapeHtml(cart.user.name)},</p><p>You still have ${cart.items.length} item(s) waiting in your cart.</p><p><a href="${escapeHtml(getAppOrigin(request))}/cart">Return to your cart</a></p>` });
       await prisma.cart.update({ where: { id: cart.id }, data: { abandonedReminderSentAt: new Date() } });
       sent++;
     } catch (error) {

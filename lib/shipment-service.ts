@@ -28,7 +28,7 @@ type OrderWithRelations = Order & {
 type TransitionMode = "manual" | "webhook";
 
 /**
- * Applies one shipment transition while holding a row lock on Shipment.
+ * Applies one shipment transition while holding Order then Shipment locks.
  *
  * The old implementation decided whether a transition was valid from an
  * order snapshot loaded before the transaction. Two concurrent webhooks
@@ -55,9 +55,9 @@ async function applyShipmentStatus(
   return prisma.$transaction(async (tx) => {
     // orderId is unique on Shipment, so this lock serializes all state
     // transitions for one shipment while allowing unrelated orders to run.
-    await tx.$queryRaw`SELECT id FROM "Shipment" WHERE "orderId" = ${orderId} FOR UPDATE`;
     // Serialize shipment restocking against customer/admin return operations.
     await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM "Shipment" WHERE "orderId" = ${orderId} FOR UPDATE`;
 
     const order = await tx.order.findUnique({
       where: { id: orderId },
@@ -83,7 +83,7 @@ async function applyShipmentStatus(
       const currentRank = SHIPMENT_STATUS_RANK[currentStatus];
       const nextRank = SHIPMENT_STATUS_RANK[nextStatus];
 
-      if (nextRank <= currentRank) {
+      if (nextRank < currentRank) {
         // Stale/duplicate webhook. Keep the raw provider state for audit but
         // never replay business side effects and never move state backwards.
         const shipment = await tx.shipment.update({
@@ -98,8 +98,8 @@ async function applyShipmentStatus(
       status: nextStatus,
       ...extra,
     };
-    if (nextStatus === "SHIPPED") shipmentData.shippedAt = new Date();
-    if (nextStatus === "DELIVERED") shipmentData.deliveredAt = new Date();
+    if (nextStatus === "SHIPPED" && !order.shipment.shippedAt) shipmentData.shippedAt = new Date();
+    if (nextStatus === "DELIVERED" && !order.shipment.deliveredAt) shipmentData.deliveredAt = new Date();
 
     const updatedShipment = await tx.shipment.update({
       where: { orderId },
@@ -110,7 +110,7 @@ async function applyShipmentStatus(
 
     if (
       nextStatus === "DELIVERED" &&
-      canTransitionOrder(order.status, "DELIVERED")
+      ["CONFIRMED", "PROCESSING", "SHIPPED"].includes(order.status)
     ) {
       const orderData: Prisma.OrderUpdateInput = { status: "DELIVERED" };
 
@@ -135,9 +135,10 @@ async function applyShipmentStatus(
       await createNotification(tx, { userId: order.userId, type: "SHIPMENT", title: "Order delivered", message: `Order ${orderId} has been delivered.`, link: `/orders/${orderId}` });
 
       if (order.userId) {
+        await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${order.userId} FOR UPDATE`;
         const points = pointsEarnedFromOrder(order.total.toNumber());
         if (points > 0) {
-          await changeLoyaltyPoints(tx, { userId: order.userId, points, type: "EARN", referenceType: "ORDER", referenceId: orderId, note: "Points earned from delivered order" });
+          await changeLoyaltyPoints(tx, { userId: order.userId, points, type: "EARN", referenceType: "ORDER", referenceId: orderId, idempotencyKey: `delivery-earn:${orderId}`, note: "Points earned from delivered order" });
         }
 
         const customer = await tx.user.findUnique({ where: { id: order.userId }, select: { referredById: true } });
@@ -152,7 +153,7 @@ async function applyShipmentStatus(
       }
     } else if (
       (nextStatus === "SHIPPED" || nextStatus === "IN_TRANSIT") &&
-      canTransitionOrder(order.status, "SHIPPED")
+      (canTransitionOrder(order.status, "SHIPPED") || (mode === "webhook" && order.status === "CONFIRMED"))
     ) {
       updatedOrder = await tx.order.update({
         where: { id: orderId },
@@ -163,11 +164,9 @@ async function applyShipmentStatus(
       await createNotification(tx, { userId: order.userId, type: "SHIPMENT", title: "Order shipped", message: `Order ${orderId} is on the way.`, link: `/orders/${orderId}` });
     } else if (
       nextStatus === "RETURNED" &&
-      (canTransitionOrder(order.status, "CANCELLED") || order.status === "DELIVERED")
+      ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status)
     ) {
-      // This branch is now protected by the Shipment row lock above. A
-      // duplicate/concurrent RETURNED webhook will observe RETURNED and exit
-      // before reaching these increments.
+      // The Order lock and current status make restocking idempotent.
       // A previously DELIVERED shipment can later be returned by Bosta.
       // Customer return requests may already have restored some stock:
       // subtract that quantity before replenishing the remaining items.
@@ -180,7 +179,7 @@ async function applyShipmentStatus(
         _sum: { quantity: true },
       });
       const receivedByItem = new Map(alreadyReceived.map((item) => [item.orderItemId, item._sum.quantity ?? 0]));
-      for (const item of order.items) {
+      for (const item of [...order.items].sort((a, b) => a.variantId.localeCompare(b.variantId))) {
         const stillToRestock = item.quantity - (receivedByItem.get(item.id) ?? 0);
         if (stillToRestock <= 0) continue;
         const variant = await tx.productVariant.update({
@@ -217,8 +216,13 @@ async function applyShipmentStatus(
       await createNotification(tx, { userId: order.userId, type: "SHIPMENT", title: "Shipment returned", message: `Order ${orderId} was returned.`, link: `/orders/${orderId}` });
     }
 
+    if (nextStatus === "DELIVERED" && order.status === "DELIVERED" &&
+        order.payment?.method === "CASH_ON_DELIVERY" && order.payment.status === "PENDING") {
+      await tx.payment.update({ where: { orderId }, data: { status: "PAID", paidAt: new Date() } });
+      updatedOrder = await tx.order.update({ where: { id: orderId }, data: { paymentStatus: "PAID" }, select: { id: true, status: true, paymentStatus: true } });
+    }
     return { shipment: updatedShipment, order: updatedOrder };
-  });
+  }, { timeout: 15000 });
 }
 
 /** Manual admin update: must follow the explicit state machine. */

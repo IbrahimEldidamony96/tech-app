@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { OrderActions } from "@/components/admin/order-actions";
+import { ReturnRefundActions } from "@/components/admin/return-refund-actions";
+import { hasPermission } from "@/lib/permissions";
 
 type Params = Promise<{ id: string }>;
 
@@ -11,7 +13,7 @@ export default async function AdminOrderDetailPage({
 }: {
   params: Params;
 }) {
-  const guardedUser = await requireAdminPagePermission("orders:read");
+  const actor = await requireAdminPagePermission("orders:read");
 
   const { id } = await params;
 
@@ -21,6 +23,7 @@ export default async function AdminOrderDetailPage({
       items: true,
       payment: true,
       shipment: true,
+      refunds: { where: { returnRequestId: null, status: { not: "CANCELLED" } }, take: 1, orderBy: { createdAt: "desc" } },
       user: { select: { name: true, email: true } },
     },
   });
@@ -100,6 +103,12 @@ export default async function AdminOrderDetailPage({
         trackingNumber={order.shipment?.trackingNumber}
         carrier={order.shipment?.carrier}
       />
+      {hasPermission(actor.role, "returns:write") && order.status === "CANCELLED" && ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"].includes(order.paymentStatus) &&
+        <section className="mt-6"><h2 className="font-semibold">Cancelled order refund</h2>
+          <ReturnRefundActions id={order.id} scope="order" current={order.status}
+            refund={order.refunds[0] ? { status: order.refunds[0].status as "PENDING_CONFIRMATION" | "CONFIRMED", amount: order.refunds[0].amount.toFixed(2) } : null}
+            paymentMethod={order.payment?.method} canConfirm={actor.role === "ADMIN" || actor.role === "SUPER_ADMIN"} />
+        </section>}
     </div>
   );
 }

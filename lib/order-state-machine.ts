@@ -20,7 +20,7 @@ const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   // والمخزون معندوش أي طريقة يترجع بيها. CANCELLED هي أقرب حالة موجودة
   // فعلًا تمثّل "الأوردر ده مكملش"، وهي أصلًا بتشغّل نفس منطق رجوع
   // المخزون المستخدم في كل حالات الإلغاء التانية.
-  SHIPPED: ["DELIVERED", "CANCELLED"],
+  SHIPPED: ["DELIVERED"],
   DELIVERED: [],
   CANCELLED: [],
 };

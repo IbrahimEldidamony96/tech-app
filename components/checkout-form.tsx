@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import type { StorePaymentMethod } from "@/lib/payment-configuration";
 
 type Address = {
   id: string;
@@ -43,11 +44,13 @@ export function CheckoutForm({
   subtotal,
   addresses,
   loyaltyPoints,
+  paymentMethods,
 }: {
   items: Item[];
   subtotal: number;
   addresses: Address[];
   loyaltyPoints: number;
+  paymentMethods: StorePaymentMethod[];
 }) {
   const router = useRouter();
   const t = useTranslations("Checkout");
@@ -86,10 +89,15 @@ export function CheckoutForm({
   // أسعار لكل محافظة (مربوط بـ cityId حقيقي عندها) — نفس المنطق بالظبط
   // اللي بيتطبق تاني وقت إنشاء الأوردر فعليًا في /api/checkout. سعر
   // الشحن بيتحدد على مستوى المحافظة بس، فمش محتاج ننتظر اختيار الحي.
-  const [shippingPreview, setShippingPreview] =
-    useState<ShippingPreview | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState("");
+  const [previewResult, setPreviewResult] = useState<{ key: string; data: ShippingPreview | null; error: string } | null>(null);
+  const previewQuery = addingNew
+    ? selectedCityId ? `cityId=${encodeURIComponent(selectedCityId)}` : ""
+    : selectedAddressId ? `addressId=${encodeURIComponent(selectedAddressId)}` : "";
+  const shippingPreview = previewResult?.key === previewQuery ? previewResult.data : null;
+  const previewError = previewResult?.key === previewQuery ? previewResult.error : "";
+  const previewLoading = !!previewQuery && previewResult?.key !== previewQuery;
+  const zonesRequest = useRef<AbortController | null>(null);
+  const districtsRequest = useRef<AbortController | null>(null);
 
   // مشتقة وقت الـ render نفسه، مش state منفصلة — بتتفادى استدعاء
   // setState بشكل sync جوه الـ effect (react-hooks/set-state-in-effect)
@@ -101,17 +109,19 @@ export function CheckoutForm({
   // في جسم الـ effect، عشان كده الـ lint rule متتفعّلش
   useEffect(() => {
     if (!addingNew || citiesLoaded) return;
+    const controller = new AbortController();
 
-    fetch("/api/bosta/cities")
+    fetch("/api/bosta/cities", { signal: controller.signal })
       .then((res) => res.json().then((body) => ({ ok: res.ok, body })))
       .then(({ ok, body }) => {
         if (!ok) throw new Error(body.error ?? t("errors.loadGovernoratesFailed"));
-        setCities(body.data ?? []);
+        if (!controller.signal.aborted) setCities(body.data ?? []);
       })
       .catch((err) =>
-        setAddressError(err.message ?? t("errors.loadGovernoratesNetwork")),
+        !controller.signal.aborted && setAddressError(err.message ?? t("errors.loadGovernoratesNetwork")),
       )
-      .finally(() => setCitiesLoaded(true));
+      .finally(() => { if (!controller.signal.aborted) setCitiesLoaded(true); });
+    return () => controller.abort();
   }, [addingNew, citiesLoaded, t]);
 
   // بنعيد حساب سعر الشحن الحقيقي كل ما مصدر العنوان يتغيّر: عنوان محفوظ
@@ -119,46 +129,30 @@ export function CheckoutForm({
   // بيتحسب على السيرفر من الكارت نفسه (مش بنبعته إحنا)، فمفيش خطر إن حد
   // يلاعب فيه من الفرونت إند.
   useEffect(() => {
-    const query = addingNew
-      ? selectedCityId
-        ? `cityId=${selectedCityId}`
-        : null
-      : selectedAddressId
-        ? `addressId=${selectedAddressId}`
-        : null;
-
-    // *** كل تحديثات الـ state هنا لازم تحصل جوه .then()، مش مباشرة في
-    // جسم الـ effect — حتى الحالة اللي منطقيًا sync زي "مفيش query
-    // خالص" (react-hooks/set-state-in-effect بترفض أي setState تلاقيه
-    // قبل أول boundary غير متزامن جوه الـ effect). الـ Promise.resolve()
-    // الفاضية دي مجرد "نقلة" لكل الكود اللي جواها يبقى رسميًا جوه
-    // callback غير متزامن — نفس السلوك بالظبط، مجرد microtask واحد فرق.
-    Promise.resolve().then(() => {
-      if (!query) {
-        setShippingPreview(null);
-        setPreviewError("");
-        return;
-      }
-
-      setPreviewLoading(true);
-      setPreviewError("");
-      fetch(`/api/checkout/shipping-cost?${query}`)
+    // Ignore responses for addresses that are no longer selected.
+    if (!previewQuery) return;
+    const controller = new AbortController();
+      fetch(`/api/checkout/shipping-cost?${previewQuery}`, { signal: controller.signal })
         .then((res) => res.json().then((body) => ({ ok: res.ok, body })))
         .then(({ ok, body }) => {
           if (!ok) throw new Error(body.error ?? t("errors.shippingCostFailed"));
-          setShippingPreview(body.data);
+          if (!controller.signal.aborted) setPreviewResult({ key: previewQuery, data: body.data, error: "" });
         })
         .catch((err) => {
-          setShippingPreview(null);
-          setPreviewError(err.message ?? t("errors.shippingCostNetwork"));
-        })
-        .finally(() => setPreviewLoading(false));
-    });
-  }, [addingNew, selectedCityId, selectedAddressId, t]);
+          if (!controller.signal.aborted) setPreviewResult({ key: previewQuery, data: null, error: err.message ?? t("errors.shippingCostNetwork") });
+        });
+    return () => controller.abort();
+  }, [previewQuery, t]);
+
+  useEffect(() => () => { zonesRequest.current?.abort(); districtsRequest.current?.abort(); }, []);
 
   // ده event handler (بينده من onChange)، مش effect — فمفيش مشكلة إن
   // setState هنا يتنادى مباشرة وsync
   function handleGovernorateChange(cityId: string) {
+    zonesRequest.current?.abort();
+    districtsRequest.current?.abort();
+    setLoadingZones(false);
+    setLoadingDistricts(false);
     const city = cities.find((c) => c.id === cityId);
     setSelectedCityId(cityId);
     setSelectedZoneId("");
@@ -173,22 +167,26 @@ export function CheckoutForm({
     }));
 
     if (!cityId) return;
+    const controller = new AbortController();
+    zonesRequest.current = controller;
 
     setLoadingZones(true);
     setAddressError("");
-    fetch(`/api/bosta/zones?cityId=${cityId}`)
+    fetch(`/api/bosta/zones?cityId=${encodeURIComponent(cityId)}`, { signal: controller.signal })
       .then((res) => res.json().then((body) => ({ ok: res.ok, body })))
       .then(({ ok, body }) => {
         if (!ok) throw new Error(body.error ?? t("errors.loadAreasFailed"));
-        setZones(body.data ?? []);
+        if (!controller.signal.aborted) setZones(body.data ?? []);
       })
       .catch((err) =>
-        setAddressError(err.message ?? t("errors.loadAreasNetwork")),
+        !controller.signal.aborted && setAddressError(err.message ?? t("errors.loadAreasNetwork")),
       )
-      .finally(() => setLoadingZones(false));
+      .finally(() => { if (!controller.signal.aborted) setLoadingZones(false); });
   }
 
   function handleZoneChange(zoneId: string) {
+    districtsRequest.current?.abort();
+    setLoadingDistricts(false);
     const zone = zones.find((z) => z.id === zoneId);
     setSelectedZoneId(zoneId);
     setSelectedDistrictId("");
@@ -196,19 +194,21 @@ export function CheckoutForm({
     setNewAddress((prev) => ({ ...prev, city: zone?.name ?? "", area: "" }));
 
     if (!zoneId || !selectedCityId) return;
+    const controller = new AbortController();
+    districtsRequest.current = controller;
 
     setLoadingDistricts(true);
     setAddressError("");
-    fetch(`/api/bosta/districts?cityId=${selectedCityId}&zoneId=${zoneId}`)
+    fetch(`/api/bosta/districts?cityId=${encodeURIComponent(selectedCityId)}&zoneId=${encodeURIComponent(zoneId)}`, { signal: controller.signal })
       .then((res) => res.json().then((body) => ({ ok: res.ok, body })))
       .then(({ ok, body }) => {
         if (!ok) throw new Error(body.error ?? t("errors.loadDistrictsFailed"));
-        setDistricts(body.data ?? []);
+        if (!controller.signal.aborted) setDistricts(body.data ?? []);
       })
       .catch((err) =>
-        setAddressError(err.message ?? t("errors.loadDistrictsNetwork")),
+        !controller.signal.aborted && setAddressError(err.message ?? t("errors.loadDistrictsNetwork")),
       )
-      .finally(() => setLoadingDistricts(false));
+      .finally(() => { if (!controller.signal.aborted) setLoadingDistricts(false); });
   }
 
   function handleDistrictChange(districtId: string) {
@@ -228,6 +228,7 @@ export function CheckoutForm({
   async function handleSubmit() {
     setSubmitting(true);
     setError("");
+    try {
 
     let addressId = selectedAddressId;
 
@@ -309,6 +310,11 @@ export function CheckoutForm({
     }
 
     router.push(`/orders/${responseBody.data.id}`);
+    } catch {
+      setError(t("errors.checkoutFailed"));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -494,7 +500,7 @@ export function CheckoutForm({
               ["CASH_ON_DELIVERY", t("cashOnDelivery")],
               ["CARD", t("card")],
               ["WALLET", t("wallet")],
-            ] as const).map(([method, label]) => (
+            ] as const).filter(([method]) => paymentMethods.includes(method)).map(([method, label]) => (
               <label
                 key={method}
                 className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 text-sm transition-colors ${paymentMethod === method ? "border-accent bg-mist" : "border-line hover:border-accent/30"}`}

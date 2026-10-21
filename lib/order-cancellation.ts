@@ -13,6 +13,7 @@ type CancellationOptions = {
   unpaidExpiredBefore?: Date;
   /** Admin manual failure only for uncaptured PENDING online payments. */
   markPaymentFailed?: boolean;
+  carrierCancellationConfirmed?: boolean;
 };
 
 /**
@@ -30,9 +31,13 @@ export async function cancelOrderAndRestock(
     await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${order.id} FOR UPDATE`;
     const current = await tx.order.findUnique({
       where: { id: order.id },
-      include: { items: true, payment: true },
+      include: { items: true, payment: true, shipment: true },
     });
     if (!current || !allowedFromStatuses.includes(current.status)) return false;
+    if (current.shipment) {
+      if (!["PENDING", "PREPARING"].includes(current.shipment.status)) return false;
+      if (current.shipment.bostaDeliveryId && !options.carrierCancellationConfirmed) return false;
+    }
 
     if (FINANCIALLY_CAPTURED.has(current.paymentStatus) ||
         (current.payment && FINANCIALLY_CAPTURED.has(current.payment.status))) {
@@ -69,8 +74,11 @@ export async function cancelOrderAndRestock(
       },
     });
     if (updated.count !== 1) return false;
+    if (current.shipment) {
+      await tx.shipment.update({ where: { orderId: current.id }, data: { status: "RETURNED" } });
+    }
 
-    for (const item of current.items) {
+    for (const item of [...current.items].sort((a, b) => a.variantId.localeCompare(b.variantId))) {
       const variant = await tx.productVariant.update({
         where: { id: item.variantId },
         data: { stock: { increment: item.quantity } },
@@ -102,8 +110,9 @@ export async function cancelOrderAndRestock(
         userId: current.userId,
         points: current.loyaltyPointsRedeemed,
         type: "REFUND",
-        referenceType: "ORDER",
+        referenceType: "ORDER_REDEMPTION_RESTORE",
         referenceId: current.id,
+        idempotencyKey: `redeem-restoration:${current.id}:${current.loyaltyPointsRedeemed}`,
         note: "Loyalty points restored after cancellation",
       });
     }

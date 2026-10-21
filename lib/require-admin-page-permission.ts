@@ -8,7 +8,7 @@ import { hasPermission, type Permission } from "@/lib/permissions";
  * seven-day role snapshot embedded in the JWT. Must run before any admin
  * database query that could disclose customer or audit information.
  */
-export async function requireAdminPagePermission(permission: Permission) {
+export async function requireAdminPagePermission(permission: Permission | readonly Permission[]) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
@@ -16,6 +16,6 @@ export async function requireAdminPagePermission(permission: Permission) {
     where: { id: session.user.id, deletedAt: null },
     select: { id: true, role: true },
   });
-  if (!user || !hasPermission(user.role, permission)) redirect("/");
+  if (!user || !(typeof permission === "string" ? hasPermission(user.role, permission) : permission.some(p => hasPermission(user.role, p)))) redirect("/");
   return user;
 }

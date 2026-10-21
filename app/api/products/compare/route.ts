@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { effectiveVariantPrice } from "@/lib/product-pricing";
+import { cheapestVariantIds } from "@/lib/queries/effective-variants";
 
 export async function GET(request: NextRequest) {
   const ids = request.nextUrl.searchParams.get("ids")?.split(",").filter(Boolean).slice(0, 4) ?? [];
   if (!ids.length) return NextResponse.json({ data: [] });
+  const chosen = await cheapestVariantIds(ids);
   const data = await prisma.product.findMany({
     where: { id: { in: ids }, isActive: true, deletedAt: null },
     select: {
@@ -12,7 +14,7 @@ export async function GET(request: NextRequest) {
       brand: { select: { name: true } }, category: { select: { nameEn: true, nameAr: true } },
       images: { where: { isPrimary: true }, take: 1, select: { url: true, alt: true } },
       specifications: { orderBy: { sortOrder: "asc" }, select: { keyEn: true, keyAr: true, valueEn: true, valueAr: true } },
-      variants: { where: { isActive: true }, orderBy: { price: "asc" }, take: 1, select: { price: true, salePrice: true, saleStartsAt: true, saleEndsAt: true, stock: true } },
+      variants: { where: { id: { in: chosen.map(row => row.id) } }, take: 1, select: { price: true, salePrice: true, saleStartsAt: true, saleEndsAt: true, stock: true } },
     },
   });
   const order = new Map(ids.map((id, i) => [id, i]));

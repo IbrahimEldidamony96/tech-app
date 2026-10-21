@@ -15,7 +15,7 @@ export default async function AdminReturnsPage() {
     include: {
       user: { select: { name: true, email: true } },
       order: { select: { id: true, paymentStatus: true, payment: { select: { method: true } } } },
-      refund: { select: { status: true, amount: true } },
+      refunds: { where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "desc" }, take: 1, select: { status: true, amount: true } },
       items: { include: { orderItem: { select: { productName: true, sku: true } } } },
     },
   });
@@ -40,7 +40,7 @@ export default async function AdminReturnsPage() {
         {canWrite ? <div className="mt-3">
           <ReturnStatusActions id={r.id} current={r.status} />
           <ReturnRefundActions id={r.id} current={r.status}
-            refund={r.refund ? { status: r.refund.status, amount: r.refund.amount.toFixed(2) } : null}
+            refund={r.refunds[0] ? { status: r.refunds[0].status as "PENDING_CONFIRMATION" | "CONFIRMED", amount: r.refunds[0].amount.toFixed(2) } : null}
             paymentMethod={r.order.payment?.method} canConfirm={guardedUser.role === "ADMIN" || guardedUser.role === "SUPER_ADMIN"} />
         </div> : null}
       </article>)}

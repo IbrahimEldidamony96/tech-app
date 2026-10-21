@@ -15,7 +15,7 @@ type Params = { params: Promise<{ id: string }> };
 // صفحة المنتج للعميل بتاخد بياناتها من استعلام منفصل
 // (lib/queries/product-detail.ts) مباشرة، مش من هنا. فمفيش داعي يفضل عام.
 export async function GET(_request: NextRequest, { params }: Params) {
-  const { error, user } = await requirePermission("catalog:write");
+  const { error } = await requirePermission("catalog:write");
   if (error) return error;
 
   const { id: productId } = await params;

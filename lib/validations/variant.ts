@@ -26,9 +26,13 @@ export const variantUpdateSchema = z.object({
   sku: z.string().min(1).max(100).optional(),
   price: z.coerce.number().positive().optional(),
   stock: z.coerce.number().int().min(0).optional(),
+  expectedStock: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
   ...saleFields,
 }).superRefine((value, ctx) => {
+  if (value.stock !== undefined && value.expectedStock === undefined) {
+    ctx.addIssue({ code: "custom", path: ["expectedStock"], message: "Reload current stock before making a correction" });
+  }
   if (value.saleStartsAt && value.saleEndsAt && value.saleStartsAt >= value.saleEndsAt) {
     ctx.addIssue({ code: "custom", path: ["saleEndsAt"], message: "Sale end must be after sale start" });
   }
