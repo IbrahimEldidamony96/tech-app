@@ -179,9 +179,11 @@
   "subtotal": "Subtotal",
   "proceedToCheckout": "Proceed to Checkout",
   "signInToCheckout": "Sign in to Checkout",
-  "signInRequired": "Sign in or create an account before placing your order."
+  "signInRequired": "Sign in or create an account before placing your order.",
+  "refreshCart": "Reload cart"
  },
  "Checkout": {
+  "loyaltyPointsAvailable": "Use loyalty points ({points} available)",
   "title": "Checkout",
   "shippingAddress": "Shipping Address",
   "addNewAddress": "+ Add a new address",
@@ -225,6 +227,7 @@
    "saveAddressFailed": "Could not save address",
    "selectOrAddAddress": "Please select or add a shipping address",
    "checkoutFailed": "Checkout failed",
+   "insufficientLoyaltyPoints": "Your loyalty balance changed. Review your available points and try again.",
    "loadGovernoratesFailed": "Failed to load governorates",
    "loadGovernoratesNetwork": "Could not load governorates — check your connection and try again.",
    "loadAreasFailed": "Failed to load areas",
@@ -233,7 +236,8 @@
    "loadDistrictsNetwork": "Could not load districts — check your connection and try again.",
    "shippingCostFailed": "Failed to calculate shipping",
    "shippingCostNetwork": "Could not calculate shipping cost right now."
-  }
+  },
+  "retryLocations": "Retry loading locations"
  },
  "OrdersPage": {
   "title": "Your Orders",
@@ -357,7 +361,9 @@
   "verificationLinkInvalidSubheading": "You can request a new one from your account page after signing in.",
   "verifyEmailPrompt": "We've sent a verification link to your email address.",
   "backToHome": "Back to home",
-  "somethingWentWrong": "Something went wrong. Please try again."
+  "somethingWentWrong": "Something went wrong. Please try again.",
+  "googleAccountLinkRequired": "An account already exists with this email. Sign in with its password or reset the password first. Google can be linked after you sign in and verify your email.",
+  "googleSignInFailed": "Google sign-in failed. Please try again or use your password."
  },
  "AdminHome": {
   "title": "Admin",
@@ -408,7 +414,24 @@
   "moveTo": "Move to {status}",
   "cancelOrder": "Cancel Order",
   "noActionsLeft": "No actions available — this order has reached a final state.",
-  "actionFailed": "Action failed"
+  "actionFailed": "Action failed",
+  "transactionId": "Paymob transaction ID",
+  "verifyPaymentHelp": "Enter the captured transaction ID from Paymob. Its amount, payment method and order reference will be checked before payment is recorded.",
+  "verifyPayment": "Verify payment",
+  "receiptConfirmed": "I have physically received and inspected all remaining goods and confirmed they can be sold. This restores their stock.",
+  "shipmentRecovery": "Recover shipment booking",
+  "shipmentRecoveryHelp": "Check this order in the Bosta dashboard before choosing the outcome. Resolve the existing booking before creating another shipment.",
+  "refreshBooking": "Refresh booking status",
+  "bookingInProgress": "The carrier request is still in progress. Refresh its status shortly.",
+  "recoveryOutcome": "Carrier dashboard outcome",
+  "recordExistingShipment": "Record the existing shipment",
+  "noCarrierBooking": "Confirmed: no booking exists",
+  "cancelCarrierBooking": "Cancel the recorded carrier booking",
+  "carrierDeliveryId": "Bosta delivery ID",
+  "carrierTrackingId": "Bosta tracking number",
+  "recoveryReason": "Reason and dashboard evidence (at least 10 characters)",
+  "carrierOutcomeConfirmed": "I checked the carrier dashboard and confirmed this outcome for this order.",
+  "recoverShipment": "Save recovery"
  },
  "ShipmentStatus": {
   "PENDING": "Pending",
@@ -416,7 +439,12 @@
   "SHIPPED": "Shipped",
   "IN_TRANSIT": "In transit",
   "DELIVERED": "Delivered",
-  "RETURNED": "Returned"
+  "RETURNED": "Returned",
+  "LOST": "Lost",
+  "DAMAGED": "Damaged",
+  "CANCELLED": "Carrier cancelled",
+  "EXCEPTION": "Carrier exception",
+  "AWAITING_RECEIPT": "Awaiting receipt and inspection"
  },
  "AdminCategories": {
   "title": "Categories",
@@ -518,6 +546,7 @@
   "addValueFailed": "Failed to add value"
  },
  "AdminVariants": {
+  "invalidSaleDate": "Choose a valid local date and time. This time may be skipped by daylight saving.",
   "title": "Variants",
   "noVariants": "No variants — this product has no price or stock until you add one below.",
   "sku": "SKU",

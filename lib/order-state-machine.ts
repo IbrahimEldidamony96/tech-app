@@ -13,13 +13,8 @@ const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PENDING: ["CONFIRMED", "CANCELLED"],
   CONFIRMED: ["PROCESSING", "CANCELLED"],
   PROCESSING: ["SHIPPED", "CANCELLED"],
-  // *** باج كان موجود: SHIPPED كان بيسمح بـ DELIVERED بس. لو Bosta رجّعت
-  // حالة الشحنة RETURNED (فشل التسليم 3 مرات، فقدان، تلف، أو إلغاء من
-  // عندهم — أكواد 48/49/100/101)، مفيش أي transition شرعي يودّي الأوردر
-  // لأي حالة تانية — كان بيفضل SHIPPED للأبد حتى لو البضاعة رجعت فعليًا
-  // والمخزون معندوش أي طريقة يترجع بيها. CANCELLED هي أقرب حالة موجودة
-  // فعلًا تمثّل "الأوردر ده مكملش"، وهي أصلًا بتشغّل نفس منطق رجوع
-  // المخزون المستخدم في كل حالات الإلغاء التانية.
+  // Carrier exceptions are reconciled by the shipment service. Direct
+  // cancellation after dispatch must not restore goods still with a carrier.
   SHIPPED: ["DELIVERED"],
   DELIVERED: [],
   CANCELLED: [],
@@ -34,14 +29,17 @@ const PAYMENT_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
 };
 
 const SHIPMENT_TRANSITIONS: Record<ShipmentStatus, ShipmentStatus[]> = {
-  // PENDING/PREPARING → RETURNED مضافة عشان Bosta ممكن تلغي الشحنة قبل
-  // حتى ما تتحرك من المخزن (مثلاً العميل رفض الاستلام بدري أو في مشكلة
-  // في العنوان)، مش بس بعد ما تطلع فعليًا
+  // RETURNED requires an explicit physical receipt and condition attestation.
   PENDING: ["PREPARING", "RETURNED"],
   PREPARING: ["SHIPPED", "RETURNED"],
   SHIPPED: ["IN_TRANSIT", "RETURNED"],
   IN_TRANSIT: ["DELIVERED", "RETURNED"],
   DELIVERED: ["RETURNED"],
+  LOST: ["AWAITING_RECEIPT"],
+  DAMAGED: ["AWAITING_RECEIPT"],
+  CANCELLED: ["AWAITING_RECEIPT"],
+  EXCEPTION: ["AWAITING_RECEIPT"],
+  AWAITING_RECEIPT: ["RETURNED"],
   RETURNED: [],
 };
 

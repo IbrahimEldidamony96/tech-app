@@ -1,0 +1,99 @@
+
+test("continued review: bcrypt silently ignores password suffixes beyond 72 bytes", async () => {
+  const { registerSchema } = await import("../lib/validations/auth");
+  const first = "A".repeat(72) + "1-original";
+  const second = "A".repeat(72) + "2-different";
+  for (const password of [first, second]) assert.equal(registerSchema.safeParse({ name: "Audit", email: "audit@example.invalid", password }).success, true);
+  assert.equal(await bcrypt.compare(second, await bcrypt.hash(first, 10)), true);
+  console.log("OBSERVED password collision: two schema-valid passwords with distinct suffixes authenticate against the same hash");
+});
+
+test("continued review: variants accept incomplete selections and duplicate empty selections", async () => {
+  const product = await prisma.product.create({ data: { categoryId, nameEn: prefix, nameAr: prefix, slug: `${prefix}-incomplete`, options: { create: [
+    { nameEn: "Size", nameAr: "Size", values: { create: { valueEn: "Large", valueAr: "Large" } } },
+    { nameEn: "Color", nameAr: "Color", values: { create: { valueEn: "Blue", valueAr: "Blue" } } },
+  ] } }, include: { options: { include: { values: true } } } });
+  products.push(product.id);
+  const result = await request(`/api/products/${product.id}/variants`, "POST", { sku: `${prefix}-partial`, price: 100, stock: 3, optionValueIds: [product.options[0].values[0].id] }, 201);
+  assert.equal(result.data.optionValues.length, 1);
+  assert.equal(product.options.length, 2);
+  for (let i = 0; i < 2; i++) await request(`/api/products/${product.id}/variants`, "POST", { sku: `${prefix}-empty-${i}`, price: 100, stock: 3, optionValueIds: [] }, 201);
+  assert.equal(await prisma.productVariant.count({ where: { productId: product.id, optionValues: { none: {} } } }), 2);
+  console.log("OBSERVED variant integrity: partial 1-of-2 selection and two empty combinations all returned 201");
+});
+
+test("continued review: fractional-piaster prices persist into order and payment totals", async () => {
+  const product = await prisma.product.create({ data: { categoryId, nameEn: prefix, nameAr: prefix, slug: `${prefix}-fractional` } });
+  products.push(product.id);
+  const created = await request(`/api/products/${product.id}/variants`, "POST", { sku: `${prefix}-fractional`, price: 12.345, stock: 3 }, 201);
+  await prisma.cartItem.deleteMany({ where: { cart: { userId } } });
+  await request("/api/cart/items", "POST", { variantId: created.data.id, quantity: 1 }, 201);
+  const address = await prisma.address.create({ data: { userId, firstName: "Audit", lastName: "Customer", phone: "01000000000", country: "Egypt", governorate: "Cairo", city: "Nasr City", area: "District 1", street: "Test only", bostaCityId: "fixture-city", bostaDistrictId: "fixture-district" } });
+  const checkout = await request("/api/checkout", "POST", { addressId: address.id, paymentMethod: "CASH_ON_DELIVERY", checkoutKey: randomUUID() }, 201);
+  orders.push(checkout.data.id);
+  const saved = await prisma.order.findUniqueOrThrow({ where: { id: checkout.data.id }, include: { payment: true } });
+  assert.equal(saved.subtotal.toString(), "12.345");
+  assert.ok(saved.total.decimalPlaces() > 2);
+  assert.equal(saved.payment!.amount.toString(), saved.total.toString());
+  console.log(`OBSERVED currency precision: subtotal=${saved.subtotal}, total=${saved.total}, payment=${saved.payment!.amount}`);
+});
+
+test("continued review: updating inactive stock consumes an unavailable-product alert", async () => {
+  const product = await prisma.product.create({ data: { categoryId, nameEn: prefix, nameAr: prefix, slug: `${prefix}-alert`, variants: { create: [
+    { sku: `${prefix}-active-empty`, price: 100, stock: 0 },
+    { sku: `${prefix}-inactive-empty`, price: 100, stock: 0, isActive: false },
+  ] } }, include: { variants: true } });
+  products.push(product.id);
+  await request("/api/stock-alerts", "POST", { productId: product.id }, 201);
+  const inactive = product.variants.find(v => !v.isActive)!;
+  await request(`/api/products/${product.id}/variants/${inactive.id}`, "PATCH", { stock: 3, expectedStock: 0 });
+  const alert = await prisma.stockAlert.findUniqueOrThrow({ where: { userId_productId: { userId, productId: product.id } } });
+  assert.ok(alert.notifiedAt);
+  assert.equal(await prisma.productVariant.count({ where: { productId: product.id, isActive: true, stock: { gt: 0 } } }), 0);
+  assert.equal(await prisma.notification.count({ where: { userId, type: "STOCK", link: `/products/${product.slug}` } }), 1);
+  console.log("OBSERVED stock alert: notification sent and subscription consumed while active sellable stock remains zero");
+});
+
+test("continued review: split returns strand a cent of the merchandise refund", async () => {
+  const source = await prisma.order.create({ data: {
+    userId, status: "DELIVERED", paymentStatus: "PAID", subtotal: 3, discount: 2, total: 1,
+    shippingFirstName: "Audit", shippingLastName: "Customer", shippingPhone: "01000000000", shippingCountry: "Egypt", shippingGovernorate: "Cairo", shippingCity: "Cairo", shippingStreet: "Test only",
+    items: { create: { variantId, quantity: 3, productName: prefix, sku: prefix, unitPrice: 1, totalPrice: 3 } },
+    payment: { create: { method: "CASH_ON_DELIVERY", status: "PAID", amount: 1, paidAt: new Date() } },
+  }, include: { items: true } });
+  orders.push(source.id);
+  const returnIds: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const rr = await request("/api/returns", "POST", { orderId: source.id, reason: "Synthetic review fixture", items: [{ orderItemId: source.items[0].id, quantity: 1 }] }, 201);
+    returnIds.push(rr.data.id);
+    await request(`/api/admin/returns/${rr.data.id}`, "PATCH", { status: "APPROVED" });
+    await request(`/api/admin/returns/${rr.data.id}`, "PATCH", { status: "RECEIVED" });
+    await request(`/api/admin/returns/${rr.data.id}/refund`, "POST", { amount: "0.33" }, 201);
+    await request(`/api/admin/returns/${rr.data.id}/refund`, "PATCH", { evidenceReference: `AUDIT-RECEIPT-${i}` });
+  }
+  const total = await prisma.refund.aggregate({ where: { orderId: source.id, status: "CONFIRMED" }, _sum: { amount: true } });
+  assert.equal(total._sum.amount!.toString(), "0.99");
+  assert.equal(await prisma.returnRequest.count({ where: { id: { in: returnIds }, status: "REFUNDED" } }), 3);
+  await request(`/api/admin/returns/${returnIds[2]}/refund`, "POST", { amount: "0.01" }, 409);
+  await request(`/api/admin/orders/${source.id}/refund`, "POST", { amount: "0.01" }, 409);
+  console.log("OBSERVED split-return refund: all 3 units returned, all requests REFUNDED, 0.99/1.00 settled, both remaining-refund routes reject 409");
+});
+
+test("continued review: order histories stop at fifty with no page traversal", async () => {
+  const records = Array.from({ length: 51 }, (_, i) => ({ id: `${prefix}-history-${i}`, userId,
+    subtotal: 1, total: 1, status: "PENDING" as const,
+    shippingFirstName: "Audit", shippingLastName: "History", shippingPhone: "01000000000", shippingCountry: "Egypt", shippingGovernorate: "Cairo", shippingCity: "Cairo", shippingStreet: "Fixture",
+    createdAt: new Date(Date.now() + i * 1000),
+  }));
+  await prisma.order.createMany({ data: records });
+  orders.push(...records.map(row => row.id));
+  const { getAllOrders } = await import("../lib/queries/admin-orders");
+  const { getOrdersForUser } = await import("../lib/queries/orders");
+  const first = await getOrdersForUser(userId);
+  assert.equal(first.length, 50);
+  assert.equal(first.some(row => row.id === records[0].id), false);
+  assert.equal((await getAllOrders()).some(row => row.id === records[0].id), false);
+  const apiOrders = await request("/api/orders");
+  assert.ok(apiOrders.data.some((row: { id: string }) => row.id === records[0].id));
+  console.log("OBSERVED order truncation: 51 fixture orders, oldest absent in both page queries while still present in customer API");
+});

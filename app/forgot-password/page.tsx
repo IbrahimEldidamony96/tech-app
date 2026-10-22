@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -14,27 +15,31 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+    try {
+      e.preventDefault();
+      setLoading(true);
+      setError("");
 
-    const res = await fetch("/api/auth/forgot-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
 
-    setLoading(false);
+      setLoading(false);
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("somethingWentWrong"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("somethingWentWrong"));
+        return;
+      }
 
-    // نفس الرسالة دايمًا — السيرفر نفسه ميقولش إذا الإيميل موجود ولا
-    // لأ، فمفيش داعي الفرونت إند يفرّق هنا برضو
-    setSent(true);
+      // نفس الرسالة دايمًا — السيرفر نفسه ميقولش إذا الإيميل موجود ولا
+      // لأ، فمفيش داعي الفرونت إند يفرّق هنا برضو
+      setSent(true);
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setLoading(false); }
   }
 
   if (sent) {

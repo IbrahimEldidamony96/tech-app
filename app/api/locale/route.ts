@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOCALE_COOKIE, SUPPORTED_LOCALES } from "@/i18n/request";
+import { safeNextPath } from "@/lib/safe-next-path";
 
 // زرار تبديل اللغة بيعمل navigation عادي لـ /api/locale?locale=ar&redirect=/products/x
 // بدل ما يبقى client component معقد بيعمل fetch + router.refresh(). ده أبسط
@@ -21,9 +22,7 @@ export async function GET(request: NextRequest) {
   //
   // الشرط الصح: يبدأ بـ "/" واحد بالظبط، ومش متبوع بـ "/" أو "\" تاني.
   const redirectParam = searchParams.get("redirect");
-  const isSafeSameSitePath =
-    !!redirectParam && /^\/(?![\/\\])/.test(redirectParam);
-  const redirectTo = isSafeSameSitePath ? redirectParam : "/";
+  const redirectTo = safeNextPath(redirectParam);
 
   const response = NextResponse.redirect(new URL(redirectTo, request.url));
   response.cookies.set(LOCALE_COOKIE, locale, {

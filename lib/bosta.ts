@@ -438,10 +438,12 @@ const BOSTA_STATE_MAP: Record<number, ShipmentStatus> = {
   30: "IN_TRANSIT", // In transit between Hubs
   41: "IN_TRANSIT", // Picked up (Heading to customer, لـ Send)
   45: "DELIVERED", // Delivered
-  48: "RETURNED", // Terminated (فشل التسليم/الاستلام 3 مرات)
-  49: "RETURNED", // Canceled
-  100: "RETURNED", // Lost
-  101: "RETURNED", // Damaged
+  46: "AWAITING_RECEIPT", // Returned to business; staff must inspect before restocking
+  60: "AWAITING_RECEIPT", // Fulfillment return; still requires a stock receipt
+  48: "EXCEPTION",
+  49: "CANCELLED",
+  100: "LOST",
+  101: "DAMAGED",
   // 47 Exception و102 Investigation و104 Archived و105 On hold — حالات
   // مؤقتة/إدارية محتاجة مراجعة يدوية، فمش بنغيّر status بتاعنا بسببها
 };
@@ -457,5 +459,10 @@ export const SHIPMENT_STATUS_RANK: Record<ShipmentStatus, number> = {
   SHIPPED: 2,
   IN_TRANSIT: 3,
   DELIVERED: 4,
-  RETURNED: 5,
+  LOST: 5,
+  DAMAGED: 5,
+  CANCELLED: 5,
+  EXCEPTION: 5,
+  AWAITING_RECEIPT: 6,
+  RETURNED: 7,
 };

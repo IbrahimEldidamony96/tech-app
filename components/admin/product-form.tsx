@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -72,83 +73,87 @@ export function ProductForm({
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
+    try {
+      e.preventDefault();
+      setSubmitting(true);
+      setError("");
 
-    // Edit sends "" / null so an emptied description or brand is really cleared
-    // (undefined would be dropped from the JSON and silently ignored).
-    const payload = {
-      nameEn: form.nameEn,
-      nameAr: form.nameAr,
-      slug: form.slug,
-      descriptionEn: isEdit ? form.descriptionEn : form.descriptionEn || undefined,
-      descriptionAr: isEdit ? form.descriptionAr : form.descriptionAr || undefined,
-      categoryId: form.categoryId,
-      brandId: isEdit ? form.brandId || null : form.brandId || undefined,
-      metaTitleEn: isEdit ? form.metaTitleEn : form.metaTitleEn || undefined,
-      metaTitleAr: isEdit ? form.metaTitleAr : form.metaTitleAr || undefined,
-      metaDescriptionEn: isEdit ? form.metaDescriptionEn : form.metaDescriptionEn || undefined,
-      metaDescriptionAr: isEdit ? form.metaDescriptionAr : form.metaDescriptionAr || undefined,
-    };
+      // Edit sends "" / null so an emptied description or brand is really cleared
+      // (undefined would be dropped from the JSON and silently ignored).
+      const payload = {
+        nameEn: form.nameEn,
+        nameAr: form.nameAr,
+        slug: form.slug,
+        descriptionEn: isEdit ? form.descriptionEn : form.descriptionEn || undefined,
+        descriptionAr: isEdit ? form.descriptionAr : form.descriptionAr || undefined,
+        categoryId: form.categoryId,
+        brandId: isEdit ? form.brandId || null : form.brandId || undefined,
+        metaTitleEn: isEdit ? form.metaTitleEn : form.metaTitleEn || undefined,
+        metaTitleAr: isEdit ? form.metaTitleAr : form.metaTitleAr || undefined,
+        metaDescriptionEn: isEdit ? form.metaDescriptionEn : form.metaDescriptionEn || undefined,
+        metaDescriptionAr: isEdit ? form.metaDescriptionAr : form.metaDescriptionAr || undefined,
+      };
 
-    const url = isEdit ? `/api/products/${initialData!.id}` : "/api/products";
-    const method = isEdit ? "PATCH" : "POST";
+      const url = isEdit ? `/api/products/${initialData!.id}` : "/api/products";
+      const method = isEdit ? "PATCH" : "POST";
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("saveFailed"));
-      setSubmitting(false);
-      return;
-    }
-
-    const body = await res.json();
-
-    // الـ variant الافتراضي اختياري فعليًا — لو السكو فاضي، معناها اليوزر
-    // عايز يضيف Options/Variants حقيقية بنفسه في صفحة الـ edit بعد كده،
-    // فمنعملش أي طلب هنا خالص
-    if (!isEdit && variant.sku.trim() !== "") {
-      const variantRes = await fetch(`/api/products/${body.data.id}/variants`, {
-        method: "POST",
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sku: variant.sku,
-          price: Number(variant.price),
-          stock: Number(variant.stock),
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (!variantRes.ok) {
-        const vBody = await variantRes.json().catch(() => ({}));
-        setError(
-          `${t("variantFailedPrefix")} ${vBody.error ?? t("unknownError")}`,
-        );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("saveFailed"));
         setSubmitting(false);
         return;
       }
-    }
 
-    if (!isEdit) {
-      // منتج جديد — نروح لصفحة الـ edit بتاعه على طول، عشان يقدر يضيف
-      // Options وVariants حقيقية من نفس المكان اللي شافه في صفحة التعديل،
-      // بدل ما يرجع للقائمة ويدور عليه تاني
-      router.push(`/admin/products/${body.data.id}/edit`);
+      const body = await res.json();
+
+      // الـ variant الافتراضي اختياري فعليًا — لو السكو فاضي، معناها اليوزر
+      // عايز يضيف Options/Variants حقيقية بنفسه في صفحة الـ edit بعد كده،
+      // فمنعملش أي طلب هنا خالص
+      if (!isEdit && variant.sku.trim() !== "") {
+        const variantRes = await fetch(`/api/products/${body.data.id}/variants`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sku: variant.sku,
+            price: Number(variant.price),
+            stock: Number(variant.stock),
+          }),
+        });
+
+        if (!variantRes.ok) {
+          const vBody = await variantRes.json().catch(() => ({}));
+          setError(
+            `${t("variantFailedPrefix")} ${vBody.error ?? t("unknownError")}`,
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      if (!isEdit) {
+        // منتج جديد — نروح لصفحة الـ edit بتاعه على طول، عشان يقدر يضيف
+        // Options وVariants حقيقية من نفس المكان اللي شافه في صفحة التعديل،
+        // بدل ما يرجع للقائمة ويدور عليه تاني
+        router.push(`/admin/products/${body.data.id}/edit`);
+        router.refresh();
+        return;
+      }
+
+      // تعديل منتج موجود — منسيبش الصفحة خالص، عشان أقسام Options/Variants
+      // اللي تحت (لو موجودة) تفضل شغالة على نفس الصفحة دي
+      setSubmitting(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
       router.refresh();
-      return;
-    }
 
-    // تعديل منتج موجود — منسيبش الصفحة خالص، عشان أقسام Options/Variants
-    // اللي تحت (لو موجودة) تفضل شغالة على نفس الصفحة دي
-    setSubmitting(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    router.refresh();
+    } catch { setError(requestFailureMessage()); }
+    finally { setSubmitting(false); }
   }
 
   return (

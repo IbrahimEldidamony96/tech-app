@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 import { useState } from "react";
 
 type Spec = { id?: string; keyEn: string; keyAr: string; valueEn: string; valueAr: string; isFilterable: boolean; sortOrder: number };
@@ -10,11 +11,15 @@ export function ProductSpecificationsManager({ productId, initialSpecifications 
   const [message, setMessage] = useState("");
   function update(i: number, patch: Partial<Spec>) { setSpecs((prev) => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s)); }
   async function save() {
-    setSaving(true); setMessage("");
-    const res = await fetch(`/api/products/${productId}/specifications`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ specifications: specs.map(({ keyEn, keyAr, valueEn, valueAr, isFilterable, sortOrder }) => ({ keyEn, keyAr, valueEn, valueAr, isFilterable, sortOrder })) }) });
-    setSaving(false);
-    if (!res.ok) { setMessage((await res.json().catch(() => ({}))).error ?? "Save failed"); return; }
-    const body = await res.json(); setSpecs(body.data); setMessage("Specifications saved");
+    try {
+      setSaving(true); setMessage("");
+      const res = await fetch(`/api/products/${productId}/specifications`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ specifications: specs.map(({ keyEn, keyAr, valueEn, valueAr, isFilterable, sortOrder }) => ({ keyEn, keyAr, valueEn, valueAr, isFilterable, sortOrder })) }) });
+      setSaving(false);
+      if (!res.ok) { setMessage((await res.json().catch(() => ({}))).error ?? "Save failed"); return; }
+      const body = await res.json(); setSpecs(body.data); setMessage("Specifications saved");
+
+    } catch { setMessage(requestFailureMessage()); }
+    finally { setSaving(false); }
   }
   return <section className="mt-8 rounded-lg border border-steel/15 p-4">
     <div className="flex items-center justify-between gap-3"><div><p className="font-semibold text-ink">Dynamic specifications</p><p className="text-xs text-steel">Filterable specs are available to catalog filters.</p></div><button type="button" onClick={() => setSpecs((p) => [...p, blank()])} className="rounded bg-ink px-3 py-1 text-xs text-paper">Add specification</button></div>

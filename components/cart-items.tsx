@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { requestFailureMessage } from "@/lib/request-error";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -25,27 +26,37 @@ export function CartItems({ initialItems }: { initialItems: CartItem[] }) {
   const t = useTranslations("Cart");
   const store = useTranslations("Storefront");
   const [items, setItems] = useState(initialItems);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pending = useRef(false);
 
   const subtotal = items.reduce((sum, item) => sum + item.variant.price * item.quantity, 0);
 
   // Optimistic update: نغيّر الواجهة فورًا، ولو السيرفر رفض (مخزون
   // اتغير من تاب تاني مثلاً) بنعمل router.refresh() يجيب الحالة الحقيقية
   async function updateQuantity(itemId: string, quantity: number) {
-    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, quantity } : i)));
-
-    const res = await fetch(`/api/cart/items/${itemId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ quantity }),
-    });
-
-    if (!res.ok) router.refresh();
+    await mutate(itemId, "PATCH", quantity);
   }
 
   async function removeItem(itemId: string) {
-    setItems((prev) => prev.filter((i) => i.id !== itemId));
-    await fetch(`/api/cart/items/${itemId}`, { method: "DELETE" });
-    router.refresh();
+    await mutate(itemId, "DELETE");
+  }
+
+  async function mutate(itemId: string, method: "PATCH" | "DELETE", quantity?: number) {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/cart/items/${itemId}`, {
+        method, headers: { "Content-Type": "application/json" },
+        body: method === "PATCH" ? JSON.stringify({ quantity }) : undefined,
+      });
+      if (!response.ok) throw new Error();
+      setItems(previous => method === "DELETE" ? previous.filter(item => item.id !== itemId) : previous.map(item => item.id === itemId ? { ...item, quantity: quantity! } : item));
+      router.refresh();
+    } catch { setError(requestFailureMessage()); }
+    finally { pending.current = false; setBusy(false); }
   }
 
   if (items.length === 0) {
@@ -63,6 +74,7 @@ export function CartItems({ initialItems }: { initialItems: CartItem[] }) {
 
   return (
     <div className="mt-9 grid items-start gap-6 lg:grid-cols-[minmax(0,1.8fr)_minmax(300px,1fr)]">
+      {error && <p role="alert" className="text-sm text-alert lg:col-span-2">{error} <button type="button" onClick={() => router.refresh()} className="underline">{t("refreshCart")}</button></p>}
       <ul className="surface-card divide-y divide-line">
         {items.map((item) => {
           const image = item.variant.product.images[0];
@@ -104,6 +116,7 @@ export function CartItems({ initialItems }: { initialItems: CartItem[] }) {
                       onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
                       className="flex h-9 w-9 items-center justify-center text-steel transition-colors hover:bg-mist hover:text-ink"
                       aria-label={t("decreaseQuantity")}
+                      disabled={busy || unavailable || item.quantity <= 1}
                     >
                       −
                     </button>
@@ -113,6 +126,7 @@ export function CartItems({ initialItems }: { initialItems: CartItem[] }) {
                       onClick={() => updateQuantity(item.id, Math.min(maxQty, item.quantity + 1))}
                       className="flex h-9 w-9 items-center justify-center text-steel transition-colors hover:bg-mist hover:text-ink"
                       aria-label={t("increaseQuantity")}
+                      disabled={busy || unavailable || item.quantity >= maxQty}
                     >
                       +
                     </button>
@@ -120,6 +134,7 @@ export function CartItems({ initialItems }: { initialItems: CartItem[] }) {
                   <button
                     type="button"
                     onClick={() => removeItem(item.id)}
+                    disabled={busy}
                     className="py-2 text-xs text-steel underline decoration-line underline-offset-4 transition-colors hover:text-alert"
                   >
                     {t("remove")}

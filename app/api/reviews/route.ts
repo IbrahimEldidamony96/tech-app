@@ -1,8 +1,9 @@
+import { Prisma } from "@/app/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/require-user";
 import { createReviewSchema } from "@/lib/validations/review";
-import { syncProductRating } from "@/lib/product-maintenance";
+import { withProductReviewLock } from "@/lib/product-maintenance";
 
 export async function POST(request: NextRequest) {
   const { session, error } = await requireUser();
@@ -73,11 +74,14 @@ export async function POST(request: NextRequest) {
 
   // ملحوظة: productId مش جاي من الـ body — بنشتقه من الـ orderItem
   // نفسه اللي اتأكدنا منه فوق، مش بنثق في أي productId العميل يبعته
-  const review = await prisma.review.create({
-    data: { userId, productId: orderItem.variant.productId, orderItemId, rating, comment },
-    select: { id: true, rating: true, comment: true, createdAt: true },
-  });
-
-  await syncProductRating(orderItem.variant.productId);
-  return NextResponse.json({ data: review }, { status: 201 });
+  try {
+    const review = await withProductReviewLock(orderItem.variant.productId, tx => tx.review.create({
+      data: { userId, productId: orderItem.variant.productId, orderItemId, rating, comment },
+      select: { id: true, rating: true, comment: true, createdAt: true },
+    }));
+    return NextResponse.json({ data: review }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return NextResponse.json({ error: "You already reviewed this product" }, { status: 409 });
+    throw error;
+  }
 }

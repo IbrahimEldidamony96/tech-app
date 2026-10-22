@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -37,51 +38,59 @@ export function BrandsManager({ initialBrands }: { initialBrands: Brand[] }) {
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
+    try {
+      e.preventDefault();
+      setSubmitting(true);
+      setError("");
 
-    const url = editingId ? `/api/brands/${editingId}` : "/api/brands";
-    const method = editingId ? "PATCH" : "POST";
+      const url = editingId ? `/api/brands/${editingId}` : "/api/brands";
+      const method = editingId ? "PATCH" : "POST";
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("saveFailed"));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("saveFailed"));
+        setSubmitting(false);
+        return;
+      }
+
+      setForm(emptyForm);
+      setEditingId(null);
+      router.refresh();
       setSubmitting(false);
-      return;
-    }
 
-    setForm(emptyForm);
-    setEditingId(null);
-    router.refresh();
-    setSubmitting(false);
+    } catch { setError(requestFailureMessage()); }
+    finally { setSubmitting(false); }
   }
 
   async function handleDelete(id: string, productCount: number) {
-    setError("");
+    try {
+      setError("");
 
-    // تحذير ودّي — مش منع فعلي، لأن الـ API نفسه بيسمح (onDelete: SetNull)
-    if (productCount > 0) {
-      const confirmed = window.confirm(t("deleteConfirm", { count: productCount }));
-      if (!confirmed) return;
-    }
+      // تحذير ودّي — مش منع فعلي، لأن الـ API نفسه بيسمح (onDelete: SetNull)
+      if (productCount > 0) {
+        const confirmed = window.confirm(t("deleteConfirm", { count: productCount }));
+        if (!confirmed) return;
+      }
 
-    const res = await fetch(`/api/brands/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/brands/${id}`, { method: "DELETE" });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("deleteFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("deleteFailed"));
+        return;
+      }
 
-    setBrands((prev) => prev.filter((b) => b.id !== id));
-    router.refresh();
+      setBrands((prev) => prev.filter((b) => b.id !== id));
+      router.refresh();
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   return (

@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -9,19 +10,23 @@ export function CompletePaymentButton({ orderId }: { orderId: string }) {
   const [error, setError] = useState("");
 
   async function handleClick() {
-    setLoading(true);
-    setError("");
+    try {
+      setLoading(true);
+      setError("");
 
-    const res = await fetch(`/api/orders/${orderId}/pay`, { method: "POST" });
-    const body = await res.json().catch(() => ({}));
+      const res = await fetch(`/api/orders/${orderId}/pay`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setError(body.error ?? t("paymentStartFailed"));
-      setLoading(false);
-      return;
-    }
+      if (!res.ok) {
+        setError(body.error ?? t("paymentStartFailed"));
+        setLoading(false);
+        return;
+      }
 
-    window.location.href = body.data.checkoutUrl;
+      window.location.href = body.data.checkoutUrl;
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setLoading(false); }
   }
 
   return (

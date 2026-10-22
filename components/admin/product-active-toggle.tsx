@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -17,18 +18,21 @@ export function ProductActiveToggle({
   const [loading, setLoading] = useState(false);
 
   async function toggle() {
-    setLoading(true);
-    const res = await fetch(`/api/products/${productId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !active }),
-    });
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/products/${productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !active }),
+      });
 
-    if (res.ok) {
+      if (!res.ok) throw new Error("Product update failed");
       setActive((prev) => !prev);
       router.refresh();
-    }
-    setLoading(false);
+      setLoading(false);
+
+    } catch { window.alert(requestFailureMessage()); }
+    finally { setLoading(false); }
   }
 
   return (

@@ -1,3 +1,4 @@
+import { validateAddressLocation } from "@/lib/address-location";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/require-user";
@@ -27,6 +28,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       { status: 400 },
     );
   }
+
+  try { await validateAddressLocation(parsed.data); }
+  catch { return NextResponse.json({ error: "Carrier location does not match the selected address. Re-select the city and district." }, { status: 400 }); }
 
   try {
     const address = await prisma.$transaction(async (tx) => {

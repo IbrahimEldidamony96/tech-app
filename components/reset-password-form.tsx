@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -18,30 +19,34 @@ export function ResetPasswordForm() {
   const [done, setDone] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!token) return;
-    setLoading(true);
-    setError("");
+    try {
+      e.preventDefault();
+      if (!token) return;
+      setLoading(true);
+      setError("");
 
-    const res = await fetch("/api/auth/reset-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, password }),
-    });
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
 
-    setLoading(false);
+      setLoading(false);
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      const firstFieldError = body.details?.fieldErrors
-        ? (Object.values(body.details.fieldErrors)[0] as string[] | undefined)?.[0]
-        : null;
-      setError(firstFieldError ?? body.error ?? t("somethingWentWrong"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const firstFieldError = body.details?.fieldErrors
+          ? (Object.values(body.details.fieldErrors)[0] as string[] | undefined)?.[0]
+          : null;
+        setError(firstFieldError ?? body.error ?? t("somethingWentWrong"));
+        return;
+      }
 
-    setDone(true);
-    setTimeout(() => router.push("/login"), 2000);
+      setDone(true);
+      setTimeout(() => router.push("/login"), 2000);
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setLoading(false); }
   }
 
   if (!token) {

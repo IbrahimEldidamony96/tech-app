@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import Image from "next/image";
@@ -30,52 +31,64 @@ export function SlidersManager({
   const sorted = [...slides].sort((a, b) => a.sortOrder - b.sortOrder);
 
   async function addSlide(url: string) {
-    setError("");
-    const res = await fetch("/api/admin/sliders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-    });
+    try {
+      setError("");
+      const res = await fetch("/api/admin/sliders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("addFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("addFailed"));
+        return;
+      }
 
-    const body = await res.json();
-    setSlides((prev) => [...prev, body.data]);
+      const body = await res.json();
+      setSlides((prev) => [...prev, body.data]);
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   async function updateSlide(id: string, patch: SlidePatch) {
-    setError("");
-    const res = await fetch(`/api/admin/sliders/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
+    try {
+      setError("");
+      const res = await fetch(`/api/admin/sliders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("updateFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("updateFailed"));
+        return;
+      }
 
-    const body = await res.json();
-    setSlides((prev) => prev.map((s) => (s.id === id ? body.data : s)));
+      const body = await res.json();
+      setSlides((prev) => prev.map((s) => (s.id === id ? body.data : s)));
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   async function deleteSlide(id: string) {
-    setError("");
-    const res = await fetch(`/api/admin/sliders/${id}`, { method: "DELETE" });
+    try {
+      setError("");
+      const res = await fetch(`/api/admin/sliders/${id}`, { method: "DELETE" });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("deleteFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("deleteFailed"));
+        return;
+      }
 
-    setSlides((prev) => prev.filter((s) => s.id !== id));
+      setSlides((prev) => prev.filter((s) => s.id !== id));
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   function move(id: string, direction: "up" | "down") {

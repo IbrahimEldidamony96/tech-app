@@ -1,49 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/require-permission";
-import { canTransitionPayment, canTransitionOrder } from "@/lib/order-state-machine";
+import { inquirePaymobTransaction, verifiedPaymobCapture, PaymobApiError } from "@/lib/paymob";
+import { recordVerifiedCapture } from "@/lib/payment-capture";
+import { writeAuditLog } from "@/lib/audit";
 
-type Params = { params: Promise<{ id: string }> };
-
-export async function POST(_request: NextRequest, { params }: Params) {
-  const { error } = await requirePermission("orders:write");
-  if (error) return error;
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requirePermission("orders:write");
+  if (guard.error) return guard.error;
   const { id } = await params;
-
-  // Order is ALWAYS locked before Payment, including the Paymob webhook and
-  // expiry cancellation. Re-read the payment after acquiring this lock.
-  const result = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${id} FOR UPDATE`;
-    const order = await tx.order.findUnique({
-      where: { id },
-      include: { payment: true },
+  const parsed = z.object({ transactionId: z.string().regex(/^\d+$/).max(30) }).safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Provide the Paymob transaction ID to verify" }, { status: 400 });
+  try {
+    const remote = await inquirePaymobTransaction(parsed.data.transactionId);
+    const capture = verifiedPaymobCapture(remote, remote);
+    if (capture.orderId !== id) throw new PaymobApiError("Transaction belongs to another order", 409);
+    const data = await prisma.$transaction(async tx => {
+      const order = await recordVerifiedCapture(tx, capture);
+      await writeAuditLog(tx, { actorId: guard.user!.id, action: "STATUS_CHANGE", entityType: "Payment", entityId: id,
+        summary: "Verified online payment with Paymob", metadata: { transactionId: capture.transactionId } });
+      return { id: order.id, status: order.status, paymentStatus: order.paymentStatus };
     });
-    if (!order || !order.payment) return { kind: "missing" as const };
-    if (order.status === "CANCELLED" ||
-        !canTransitionPayment(order.payment.status, "PAID")) {
-      return { kind: "invalid" as const };
-    }
-
-    await tx.payment.update({
-      where: { orderId: id },
-      data: { status: "PAID", paidAt: new Date() },
-    });
-    const updated = await tx.order.update({
-      where: { id },
-      data: {
-        paymentStatus: "PAID",
-        ...(canTransitionOrder(order.status, "CONFIRMED") ? { status: "CONFIRMED" as const } : {}),
-      },
-      select: { id: true, status: true, paymentStatus: true },
-    });
-    return { kind: "ok" as const, updated };
-  });
-
-  if (result.kind === "missing") {
-    return NextResponse.json({ error: "Order or payment not found" }, { status: 404 });
+    return NextResponse.json({ data });
+  } catch (error) {
+    if (error instanceof PaymobApiError) return NextResponse.json({ error: error.message }, { status: error.status === 409 ? 409 : 503 });
+    throw error;
   }
-  if (result.kind === "invalid") {
-    return NextResponse.json({ error: "Cannot mark a cancelled or already settled order paid" }, { status: 409 });
-  }
-  return NextResponse.json({ data: result.updated });
 }

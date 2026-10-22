@@ -59,17 +59,26 @@ export async function PATCH(request: NextRequest) {
 
   // CAS prevents concurrent password updates using the same old credentials.
   // Session revocation is committed atomically with the new password hash.
-  const updated = await prisma.user.updateMany({
-    where: {
-      id: userId,
-      deletedAt: null,
-      sessionVersion: user.sessionVersion,
-      password: user.password,
-    },
-    data: {
-      password: newHash,
-      sessionVersion: { increment: 1 },
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    const changed = await tx.user.updateMany({
+      where: {
+        id: userId,
+        deletedAt: null,
+        sessionVersion: user.sessionVersion,
+        password: user.password,
+      },
+      data: {
+        password: newHash,
+        sessionVersion: { increment: 1 },
+      },
+    });
+    if (changed.count === 1) {
+      await tx.verificationToken.updateMany({
+        where: { userId, type: "PASSWORD_RESET", usedAt: null },
+        data: { usedAt: new Date() },
+      });
+    }
+    return changed;
   });
 
   if (updated.count !== 1) {

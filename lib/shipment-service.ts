@@ -27,6 +27,16 @@ type OrderWithRelations = Order & {
 
 type TransitionMode = "manual" | "webhook";
 
+async function cancelShipmentOrder(tx: Prisma.TransactionClient, order: OrderWithRelations, title: string) {
+  if (order.status === "CANCELLED") return null;
+  if (order.couponId) await tx.coupon.updateMany({ where: { id: order.couponId, usedCount: { gt: 0 } }, data: { usedCount: { decrement: 1 } } });
+  const updated = await tx.order.update({ where: { id: order.id }, data: { status: "CANCELLED" }, select: { id: true, status: true, paymentStatus: true } });
+  await compensateOrderLoyalty(tx, order.id, { returnedShipment: true });
+  await tx.orderEvent.create({ data: { orderId: order.id, status: "CANCELLED", title, description: "Any captured payment requires refund reconciliation. Inventory is restored only after an inspected receipt." } });
+  await createNotification(tx, { userId: order.userId, type: "SHIPMENT", title, message: `Order ${order.id} needs shipment/refund review.`, link: `/orders/${order.id}` });
+  return updated;
+}
+
 /**
  * Applies one shipment transition while holding Order then Shipment locks.
  *
@@ -52,7 +62,16 @@ async function applyShipmentStatus(
   > = {},
   mode: TransitionMode,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction((tx) => applyShipmentStatusInTransaction(tx, orderId, nextStatus, extra, mode), { timeout: 15000 });
+}
+
+async function applyShipmentStatusInTransaction(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  nextStatus: ShipmentStatus,
+  extra: Partial<Pick<Shipment, "trackingNumber" | "carrier" | "shippingMethod" | "bostaRawState" | "bostaDeliveryId">>,
+  mode: TransitionMode,
+) {
     // orderId is unique on Shipment, so this lock serializes all state
     // transitions for one shipment while allowing unrelated orders to run.
     // Serialize shipment restocking against customer/admin return operations.
@@ -163,8 +182,7 @@ async function applyShipmentStatus(
       await tx.orderEvent.create({ data: { orderId, status: "SHIPPED", title: "Order shipped" } });
       await createNotification(tx, { userId: order.userId, type: "SHIPMENT", title: "Order shipped", message: `Order ${orderId} is on the way.`, link: `/orders/${orderId}` });
     } else if (
-      nextStatus === "RETURNED" &&
-      ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status)
+      nextStatus === "RETURNED" && !order.shipment.stockRestoredAt
     ) {
       // The Order lock and current status make restocking idempotent.
       // A previously DELIVERED shipment can later be returned by Bosta.
@@ -191,29 +209,10 @@ async function applyShipmentStatus(
         await notifyStockAvailable(tx, item.variantId);
       }
 
-      if (order.couponId) {
-        await tx.coupon.updateMany({
-          where: { id: order.couponId, usedCount: { gt: 0 } },
-          data: { usedCount: { decrement: 1 } },
-        });
-      }
-
-      if (order.payment?.status === "PAID" || order.payment?.status === "PARTIALLY_REFUNDED") {
-        console.error(
-          `Shipment for order ${orderId} came back RETURNED, but payment is PAID (${order.payment.method}) — manual refund/reconciliation is required.`,
-        );
-      }
-
-      updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data: { status: "CANCELLED" },
-        select: { id: true, status: true, paymentStatus: true },
-      });
-      // Points earned at delivery, referral bonuses and redeemed points are
-      // compensated here. Paid refunds still require financial reconciliation.
-      await compensateOrderLoyalty(tx, orderId, { returnedShipment: true });
-      await tx.orderEvent.create({ data: { orderId, status: "CANCELLED", title: "Shipment returned", description: "The shipment was returned to the store. Any paid refund requires reconciliation." } });
-      await createNotification(tx, { userId: order.userId, type: "SHIPMENT", title: "Shipment returned", message: `Order ${orderId} was returned.`, link: `/orders/${orderId}` });
+      await tx.shipment.update({ where: { orderId }, data: { stockRestoredAt: new Date() } });
+      updatedOrder = await cancelShipmentOrder(tx, order, "Shipment returned and inspected");
+    } else if (["LOST", "DAMAGED", "CANCELLED", "EXCEPTION", "AWAITING_RECEIPT"].includes(nextStatus)) {
+      updatedOrder = await cancelShipmentOrder(tx, order, nextStatus === "AWAITING_RECEIPT" ? "Returned goods await inspection" : "Carrier shipment exception");
     }
 
     if (nextStatus === "DELIVERED" && order.status === "DELIVERED" &&
@@ -222,7 +221,6 @@ async function applyShipmentStatus(
       updatedOrder = await tx.order.update({ where: { id: orderId }, data: { paymentStatus: "PAID" }, select: { id: true, status: true, paymentStatus: true } });
     }
     return { shipment: updatedShipment, order: updatedOrder };
-  }, { timeout: 15000 });
 }
 
 /** Manual admin update: must follow the explicit state machine. */
@@ -235,7 +233,9 @@ export async function applyManualShipmentUpdate(
     carrier?: string;
     shippingMethod?: string;
   },
+  receiptConfirmed = false,
 ) {
+  if (nextStatus === "RETURNED" && !receiptConfirmed) throw new ShipmentTransitionError("Confirm physical receipt and sellable condition before restocking");
   return applyShipmentStatus(orderId, nextStatus, details, "manual");
 }
 
@@ -252,8 +252,19 @@ export async function applyBostaWebhookStatus(
 ) {
   return applyShipmentStatus(
     orderId,
-    nextStatus,
+    nextStatus === "RETURNED" ? "AWAITING_RECEIPT" : nextStatus,
     { bostaRawState },
     "webhook",
   );
+}
+
+export async function applyBostaWebhookStatusInTransaction(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  nextStatus: ShipmentStatus,
+  bostaRawState: string,
+) {
+  return applyShipmentStatusInTransaction(tx, orderId,
+    nextStatus === "RETURNED" ? "AWAITING_RECEIPT" : nextStatus,
+    { bostaRawState }, "webhook");
 }

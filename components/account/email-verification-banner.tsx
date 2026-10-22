@@ -8,9 +8,13 @@ export function EmailVerificationBanner() {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
   async function handleResend() {
+    try {
     setStatus("sending");
     const res = await fetch("/api/auth/verify-email/resend", { method: "POST" });
     setStatus(res.ok ? "sent" : "error");
+
+    } catch { setStatus("error"); }
+
   }
 
   return (

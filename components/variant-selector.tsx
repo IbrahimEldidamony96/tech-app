@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -41,39 +42,43 @@ export function VariantSelector({
   const maxQuantity = matchedVariant ? Math.min(10, matchedVariant.stock) : 10;
 
   async function handleAddToCart() {
-    if (!matchedVariant) return;
-    setStatus("loading");
-    setErrorMessage("");
+    try {
+      if (!matchedVariant) return;
+      setStatus("loading");
+      setErrorMessage("");
 
-    const res = await fetch("/api/cart/items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ variantId: matchedVariant.id, quantity }),
-    });
+      const res = await fetch("/api/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ variantId: matchedVariant.id, quantity }),
+      });
 
-    if (res.status === 401) {
-      let cart: { variantId: string; quantity: number }[] = [];
-      try { cart = JSON.parse(localStorage.getItem("guestCart") ?? "[]"); } catch {}
-      const existing = cart.find((item) => item.variantId === matchedVariant.id);
-      const next = existing
-        ? cart.map((item) => item.variantId === matchedVariant.id ? { ...item, quantity: Math.min(10, item.quantity + quantity) } : item)
-        : [...cart, { variantId: matchedVariant.id, quantity }];
-      localStorage.setItem("guestCart", JSON.stringify(next));
-      window.dispatchEvent(new Event("guest-cart-changed"));
+      if (res.status === 401) {
+        let cart: { variantId: string; quantity: number }[] = [];
+        try { cart = JSON.parse(localStorage.getItem("guestCart") ?? "[]"); } catch {}
+        const existing = cart.find((item) => item.variantId === matchedVariant.id);
+        const next = existing
+          ? cart.map((item) => item.variantId === matchedVariant.id ? { ...item, quantity: Math.min(10, item.quantity + quantity) } : item)
+          : [...cart, { variantId: matchedVariant.id, quantity }];
+        localStorage.setItem("guestCart", JSON.stringify(next));
+        window.dispatchEvent(new Event("guest-cart-changed"));
+        setStatus("added");
+        setTimeout(() => setStatus("idle"), 2000);
+        return;
+      }
+
+      if (!res.ok) {
+        const responseBody = await res.json().catch(() => ({}));
+        setErrorMessage(responseBody.error ?? "Something went wrong");
+        setStatus("error");
+        return;
+      }
+
       setStatus("added");
       setTimeout(() => setStatus("idle"), 2000);
-      return;
-    }
 
-    if (!res.ok) {
-      const responseBody = await res.json().catch(() => ({}));
-      setErrorMessage(responseBody.error ?? "Something went wrong");
-      setStatus("error");
-      return;
-    }
+    } catch { setErrorMessage(requestFailureMessage()); setStatus("error"); }
 
-    setStatus("added");
-    setTimeout(() => setStatus("idle"), 2000);
   }
 
   return (

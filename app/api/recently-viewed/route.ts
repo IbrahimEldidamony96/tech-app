@@ -1,3 +1,5 @@
+import { getRecentlyViewed } from "@/lib/queries/recently-viewed";
+import { effectiveVariantPrice, isSaleActive } from "@/lib/product-pricing";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -6,20 +8,8 @@ import { requireUser } from "@/lib/require-user";
 export async function GET() {
   const { session, error } = await requireUser();
   if (error) return error;
-  const items = await prisma.recentlyViewed.findMany({
-    where: { userId: session!.user.id },
-    orderBy: { viewedAt: "desc" },
-    take: 30,
-    include: {
-      product: {
-        select: {
-          id: true, slug: true, nameEn: true, nameAr: true,
-          images: { where: { isPrimary: true }, take: 1, select: { url: true, alt: true } },
-          variants: { where: { isActive: true }, orderBy: { price: "asc" }, take: 1, select: { price: true, salePrice: true, saleStartsAt: true, saleEndsAt: true, stock: true } },
-        },
-      },
-    },
-  });
+  const rows = await getRecentlyViewed(session!.user.id);
+  const items = rows.map(row => ({ ...row, product: { ...row.product, variants: row.product.variants.map(v => ({ ...v, effectivePrice: effectiveVariantPrice(v).toNumber(), saleActive: isSaleActive(v) })) } }));
   return NextResponse.json({ data: items });
 }
 

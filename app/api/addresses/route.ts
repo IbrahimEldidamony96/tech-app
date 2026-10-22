@@ -1,3 +1,4 @@
+import { validateAddressLocation } from "@/lib/address-location";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/require-user";
@@ -34,6 +35,9 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  try { await validateAddressLocation(parsed.data); }
+  catch { return NextResponse.json({ error: "Carrier location does not match the selected address. Re-select the city and district." }, { status: 400 }); }
 
   const address = await prisma.$transaction(async (tx) => {
     // Serialize address mutations per user so two concurrent creates cannot

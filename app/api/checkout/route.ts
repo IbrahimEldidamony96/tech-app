@@ -19,7 +19,7 @@ import { getAppOrigin } from "@/lib/app-url";
 import { effectiveVariantPrice } from "@/lib/product-pricing";
 import { calculateBundleDiscount } from "@/lib/bundle-discount";
 import { eligibleCouponSubtotal } from "@/lib/coupon-eligibility";
-import { changeLoyaltyPoints } from "@/lib/loyalty";
+import { changeLoyaltyPoints, InsufficientLoyaltyPointsError } from "@/lib/loyalty";
 import { createNotification } from "@/lib/notifications";
 import { availablePaymentMethods } from "@/lib/payment-configuration";
 
@@ -442,6 +442,11 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (err) {
+    if (err instanceof InsufficientLoyaltyPointsError) {
+      const customer = await prisma.user.findUnique({ where: { id: userId }, select: { loyaltyPoints: true } });
+      return NextResponse.json({ error: "Your loyalty balance changed. Review your points and try again.",
+        code: "INSUFFICIENT_LOYALTY_POINTS", loyaltyPoints: customer?.loyaltyPoints ?? 0 }, { status: 409 });
+    }
     if (err instanceof CheckoutError) {
       return NextResponse.json(
         { error: err.message, code: err.code },

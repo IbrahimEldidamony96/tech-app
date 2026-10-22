@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -49,60 +50,68 @@ export function ShippingRatesManager({
   }
 
   async function handleSave(rate: AdminShippingRateRow) {
-    const row = rows.get(rate.bostaCityId)!;
-    const fee = Number(row.fee);
-    const { primary } = cityLabel(rate);
-    if (!row.fee || Number.isNaN(fee) || fee < 0) {
-      setError(t("enterValidFee", { city: primary }));
-      return;
-    }
+    try {
+      const row = rows.get(rate.bostaCityId)!;
+      const fee = Number(row.fee);
+      const { primary } = cityLabel(rate);
+      if (!row.fee || Number.isNaN(fee) || fee < 0) {
+        setError(t("enterValidFee", { city: primary }));
+        return;
+      }
 
-    setError("");
-    setSavingId(rate.bostaCityId);
+      setError("");
+      setSavingId(rate.bostaCityId);
 
-    const res = await fetch("/api/admin/shipping-rates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        bostaCityId: rate.bostaCityId,
-        cityNameEn: rate.cityNameEn,
-        cityNameAr: rate.cityNameAr ?? undefined,
-        fee,
-        isActive: row.isActive,
-      }),
-    });
+      const res = await fetch("/api/admin/shipping-rates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bostaCityId: rate.bostaCityId,
+          cityNameEn: rate.cityNameEn,
+          cityNameAr: rate.cityNameAr ?? undefined,
+          fee,
+          isActive: row.isActive,
+        }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("saveFailed", { city: primary }));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("saveFailed", { city: primary }));
+        setSavingId(null);
+        return;
+      }
+
       setSavingId(null);
-      return;
-    }
+      router.refresh();
 
-    setSavingId(null);
-    router.refresh();
+    } catch { setError(requestFailureMessage()); }
+    finally { setSavingId(null); }
   }
 
   async function handleReset(rate: AdminShippingRateRow) {
-    if (!rate.rateId) return;
-    const { primary } = cityLabel(rate);
-    setError("");
-    setSavingId(rate.bostaCityId);
+    try {
+      if (!rate.rateId) return;
+      const { primary } = cityLabel(rate);
+      setError("");
+      setSavingId(rate.bostaCityId);
 
-    const res = await fetch(`/api/admin/shipping-rates/${rate.rateId}`, {
-      method: "DELETE",
-    });
+      const res = await fetch(`/api/admin/shipping-rates/${rate.rateId}`, {
+        method: "DELETE",
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("resetFailed", { city: primary }));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("resetFailed", { city: primary }));
+        setSavingId(null);
+        return;
+      }
+
+      updateRow(rate.bostaCityId, { fee: "", isActive: true });
       setSavingId(null);
-      return;
-    }
+      router.refresh();
 
-    updateRow(rate.bostaCityId, { fee: "", isActive: true });
-    setSavingId(null);
-    router.refresh();
+    } catch { setError(requestFailureMessage()); }
+    finally { setSavingId(null); }
   }
 
   return (

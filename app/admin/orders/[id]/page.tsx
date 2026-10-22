@@ -94,15 +94,16 @@ export default async function AdminOrderDetailPage({
         </p>
       </div>
 
-      <OrderActions
+      {hasPermission(actor.role, "orders:write") && <OrderActions
         orderId={order.id}
         orderStatus={order.status}
         paymentStatus={order.paymentStatus}
         paymentMethod={order.payment?.method ?? null}
+        paymentTransactionId={order.payment?.transactionId}
         shipmentStatus={order.shipment?.status ?? null}
         trackingNumber={order.shipment?.trackingNumber}
         carrier={order.shipment?.carrier}
-      />
+      />}
       {hasPermission(actor.role, "returns:write") && order.status === "CANCELLED" && ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"].includes(order.paymentStatus) &&
         <section className="mt-6"><h2 className="font-semibold">Cancelled order refund</h2>
           <ReturnRefundActions id={order.id} scope="order" current={order.status}

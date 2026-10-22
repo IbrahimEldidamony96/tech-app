@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -60,44 +61,52 @@ export function CategoriesManager({
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
+    try {
+      e.preventDefault();
+      setSubmitting(true);
+      setError("");
 
-    const url = editingId ? `/api/categories/${editingId}` : "/api/categories";
-    const method = editingId ? "PATCH" : "POST";
+      const url = editingId ? `/api/categories/${editingId}` : "/api/categories";
+      const method = editingId ? "PATCH" : "POST";
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, parentId: form.parentId || undefined }),
-    });
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, parentId: form.parentId || undefined }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("saveFailed"));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("saveFailed"));
+        setSubmitting(false);
+        return;
+      }
+
+      setForm(emptyForm);
+      setEditingId(null);
+      router.refresh();
       setSubmitting(false);
-      return;
-    }
 
-    setForm(emptyForm);
-    setEditingId(null);
-    router.refresh();
-    setSubmitting(false);
+    } catch { setError(requestFailureMessage()); }
+    finally { setSubmitting(false); }
   }
 
   async function handleDelete(id: string) {
-    setError("");
-    const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
+    try {
+      setError("");
+      const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("deleteFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("deleteFailed"));
+        return;
+      }
 
-    setCategories((prev) => prev.filter((c) => c.id !== id));
-    router.refresh();
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+      router.refresh();
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   return (

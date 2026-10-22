@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -17,13 +18,17 @@ export function StaffRoleSelect({ userId, value }: { userId: string; value: stri
         disabled={busy}
         className="rounded border border-steel/20 px-2 py-1 text-sm"
         onChange={async (e) => {
+    try {
           setBusy(true); setError("");
           const res = await fetch(`/api/admin/staff/${userId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: e.target.value }) });
           const body = await res.json().catch(() => ({}));
           setBusy(false);
           if (!res.ok) { setError(body.error ?? "Update failed"); router.refresh(); return; }
           router.refresh();
-        }}
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setBusy(false); }
+  }}
       >
         {roles.map((role) => <option key={role} value={role}>{role}</option>)}
       </select>

@@ -5,13 +5,13 @@ import { useTranslations } from "next-intl";
 import { localized } from "@/lib/locale";
 import type { AppLocale } from "@/i18n/request";
 import type { OptionWithValues } from "./options-manager";
+import { localDateTime, saleDateUpdate } from "@/lib/local-date-time";
 
 export type VariantWithSummary = {
   id: string; sku: string; price: number; stock: number; isActive: boolean; optionSummary: string;
   salePrice: number | null; saleStartsAt: string | null; saleEndsAt: string | null;
 };
 const emptyNew = { sku: "", price: "", stock: "" };
-const localDateTime = (iso: string | null) => iso ? new Date(iso).toISOString().slice(0,16) : "";
 
 export function VariantsManager({ productId, options, variants, setVariants, locale }: {
   productId: string; options: OptionWithValues[]; variants: VariantWithSummary[];
@@ -34,6 +34,15 @@ export function VariantsManager({ productId, options, variants, setVariants, loc
       setError("Could not contact the server. Try again.");
     } finally {
       setSavingId(null);
+    }
+  }
+
+  function updateSaleDate(variant: VariantWithSummary, field: "saleStartsAt" | "saleEndsAt", value: string) {
+    try {
+      const next = saleDateUpdate(value, variant[field]);
+      if (next !== undefined) void updateVariant(variant.id, { [field]: next });
+    } catch {
+      setError(t("invalidSaleDate"));
     }
   }
 
@@ -64,8 +73,8 @@ export function VariantsManager({ productId, options, variants, setVariants, loc
         </div>
         <div className="mt-2 grid gap-2 border-t border-steel/10 pt-2 sm:grid-cols-3">
           <label className="text-[11px] text-steel">Sale price<input type="number" min="0" step="0.01" defaultValue={v.salePrice??""} onBlur={e=>updateVariant(v.id,{salePrice:e.target.value?Number(e.target.value):null})} className="mt-1 w-full rounded border border-steel/25 px-2 py-1 text-xs" /></label>
-          <label className="text-[11px] text-steel">Sale starts<input type="datetime-local" defaultValue={localDateTime(v.saleStartsAt)} onBlur={e=>updateVariant(v.id,{saleStartsAt:e.target.value?new Date(e.target.value).toISOString():null})} className="mt-1 w-full rounded border border-steel/25 px-2 py-1 text-xs" /></label>
-          <label className="text-[11px] text-steel">Sale ends<input type="datetime-local" defaultValue={localDateTime(v.saleEndsAt)} onBlur={e=>updateVariant(v.id,{saleEndsAt:e.target.value?new Date(e.target.value).toISOString():null})} className="mt-1 w-full rounded border border-steel/25 px-2 py-1 text-xs" /></label>
+          <label className="text-[11px] text-steel">Sale starts<input key={`start:${v.saleStartsAt}`} type="datetime-local" defaultValue={localDateTime(v.saleStartsAt)} onBlur={e=>updateSaleDate(v,"saleStartsAt",e.target.value)} disabled={savingId===v.id} className="mt-1 w-full rounded border border-steel/25 px-2 py-1 text-xs" /></label>
+          <label className="text-[11px] text-steel">Sale ends<input key={`end:${v.saleEndsAt}`} type="datetime-local" defaultValue={localDateTime(v.saleEndsAt)} onBlur={e=>updateSaleDate(v,"saleEndsAt",e.target.value)} disabled={savingId===v.id} className="mt-1 w-full rounded border border-steel/25 px-2 py-1 text-xs" /></label>
         </div>
       </div>)}
     </div>}

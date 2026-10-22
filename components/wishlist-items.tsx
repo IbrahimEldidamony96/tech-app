@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { requestFailureMessage } from "@/lib/request-error";
 import Link from "next/link";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
@@ -22,16 +23,25 @@ export function WishlistItems({ initialItems }: { initialItems: Item[] }) {
   const t = useTranslations("Wishlist");
   const store = useTranslations("Storefront");
   const [items, setItems] = useState(initialItems);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pending = useRef(false);
 
   // toggle بتاعت Phase 4: بما إن العنصر أصلاً محفوظ، الضغطة هنا هتشيله —
   // بنشيله من الواجهة فورًا (optimistic) من غير ما نستنى رد السيرفر
   async function remove(productId: string) {
-    setItems((prev) => prev.filter((i) => i.product.id !== productId));
-    await fetch("/api/wishlist/toggle", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productId }),
-    });
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/wishlist", {
+        method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId }),
+      });
+      if (!response.ok) throw new Error();
+      setItems(previous => previous.filter(item => item.product.id !== productId));
+    } catch { setError(requestFailureMessage()); }
+    finally { pending.current = false; setBusy(false); }
   }
 
   if (items.length === 0) {
@@ -49,6 +59,7 @@ export function WishlistItems({ initialItems }: { initialItems: Item[] }) {
 
   return (
     <ul className="mt-9 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {error && <li role="alert" className="text-sm text-alert sm:col-span-2 lg:col-span-3">{error}</li>}
       {items.map((item) => (
         <li key={item.id} className="overflow-hidden rounded-3xl border border-line bg-surface p-4">
           <Link href={`/products/${item.product.slug}`} className="relative block aspect-[4/3] overflow-hidden rounded-2xl bg-mist">
@@ -79,6 +90,7 @@ export function WishlistItems({ initialItems }: { initialItems: Item[] }) {
             <button
               type="button"
               onClick={() => remove(item.product.id)}
+              disabled={busy}
               className="mt-4 text-xs text-steel underline decoration-line underline-offset-4 hover:text-alert"
             >
               {t("removeItem")}

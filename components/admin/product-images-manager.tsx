@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import Image from "next/image";
@@ -31,78 +32,90 @@ export function ProductImagesManager({
   const sorted = [...images].sort((a, b) => a.sortOrder - b.sortOrder);
 
   async function addImage(url: string) {
-    setError("");
-    const res = await fetch(`/api/products/${productId}/images`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-    });
+    try {
+      setError("");
+      const res = await fetch(`/api/products/${productId}/images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("addFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("addFailed"));
+        return;
+      }
 
-    const body = await res.json();
-    // A product's first image comes back already isPrimary — that's the
-    // server's call (we didn't send isPrimary at all), so just trust it.
-    setImages((prev) => [...prev, body.data]);
+      const body = await res.json();
+      // A product's first image comes back already isPrimary — that's the
+      // server's call (we didn't send isPrimary at all), so just trust it.
+      setImages((prev) => [...prev, body.data]);
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   async function updateImage(imageId: string, patch: ImagePatch) {
-    setError("");
-    const res = await fetch(`/api/products/${productId}/images/${imageId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
+    try {
+      setError("");
+      const res = await fetch(`/api/products/${productId}/images/${imageId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("updateFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("updateFailed"));
+        return;
+      }
 
-    const body = await res.json();
-    setImages((prev) =>
-      prev.map((img) => {
-        if (img.id === imageId) return body.data;
-        // Setting a new primary un-sets every other image server-side —
-        // mirror that locally instead of refetching the whole list.
-        if (patch.isPrimary && img.isPrimary)
-          return { ...img, isPrimary: false };
-        return img;
-      }),
-    );
+      const body = await res.json();
+      setImages((prev) =>
+        prev.map((img) => {
+          if (img.id === imageId) return body.data;
+          // Setting a new primary un-sets every other image server-side —
+          // mirror that locally instead of refetching the whole list.
+          if (patch.isPrimary && img.isPrimary)
+            return { ...img, isPrimary: false };
+          return img;
+        }),
+      );
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   async function deleteImage(imageId: string) {
-    setError("");
-    const target = images.find((img) => img.id === imageId);
+    try {
+      setError("");
+      const target = images.find((img) => img.id === imageId);
 
-    const res = await fetch(`/api/products/${productId}/images/${imageId}`, {
-      method: "DELETE",
-    });
+      const res = await fetch(`/api/products/${productId}/images/${imageId}`, {
+        method: "DELETE",
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("deleteFailed"));
-      return;
-    }
-
-    setImages((prev) => {
-      const rest = prev.filter((img) => img.id !== imageId);
-      // Mirror the server's auto-promotion: deleting the primary image
-      // hands the crown to whichever image is now first in sort order.
-      if (target?.isPrimary && rest.length > 0) {
-        const bySortOrder = [...rest].sort((a, b) => a.sortOrder - b.sortOrder);
-        return bySortOrder.map((img, i) =>
-          i === 0 ? { ...img, isPrimary: true } : img,
-        );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("deleteFailed"));
+        return;
       }
-      return rest;
-    });
+
+      setImages((prev) => {
+        const rest = prev.filter((img) => img.id !== imageId);
+        // Mirror the server's auto-promotion: deleting the primary image
+        // hands the crown to whichever image is now first in sort order.
+        if (target?.isPrimary && rest.length > 0) {
+          const bySortOrder = [...rest].sort((a, b) => a.sortOrder - b.sortOrder);
+          return bySortOrder.map((img, i) =>
+            i === 0 ? { ...img, isPrimary: true } : img,
+          );
+        }
+        return rest;
+      });
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   function move(imageId: string, direction: "up" | "down") {

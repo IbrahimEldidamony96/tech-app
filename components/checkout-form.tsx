@@ -62,6 +62,8 @@ export function CheckoutForm({
   const [couponCode, setCouponCode] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
+  const [loyaltyBalanceOverride, setLoyaltyBalanceOverride] = useState<number | null>(null);
+  const availableLoyaltyPoints = Math.max(0, loyaltyBalanceOverride ?? loyaltyPoints);
   const checkoutKeyRef = useRef<string>(crypto.randomUUID());
   const [paymentMethod, setPaymentMethod] = useState<
     "CASH_ON_DELIVERY" | "CARD" | "WALLET"
@@ -294,7 +296,12 @@ export function CheckoutForm({
 
     if (!res.ok) {
       const responseBody = await res.json().catch(() => ({}));
-      setError(responseBody.error ?? t("errors.checkoutFailed"));
+      if (responseBody.code === "INSUFFICIENT_LOYALTY_POINTS") {
+        if (Number.isInteger(responseBody.loyaltyPoints)) setLoyaltyBalanceOverride(responseBody.loyaltyPoints);
+        setLoyaltyPointsToRedeem(0);
+        setError(t("errors.insufficientLoyaltyPoints"));
+        router.refresh();
+      } else setError(responseBody.error ?? t("errors.checkoutFailed"));
       setSubmitting(false);
       return;
     }
@@ -593,8 +600,8 @@ export function CheckoutForm({
             <textarea value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} maxLength={500} rows={2} placeholder="Delivery instructions (optional)" className="field-input min-w-0 w-full text-ink" />
           </label>
           <label className="block text-xs text-steel">
-            <span className="mb-1 block font-medium text-ink">Use loyalty points ({loyaltyPoints} available)</span>
-            <input type="number" min={0} max={Math.min(loyaltyPoints, Math.floor(subtotal))} value={loyaltyPointsToRedeem} onChange={(e) => setLoyaltyPointsToRedeem(Math.max(0, Math.min(Number(e.target.value) || 0, loyaltyPoints, Math.floor(subtotal))))} className="field-input min-w-0 w-full text-ink" />
+            <span className="mb-1 block font-medium text-ink">{t("loyaltyPointsAvailable", { points: availableLoyaltyPoints })}</span>
+            <input type="number" min={0} max={Math.min(availableLoyaltyPoints, Math.floor(subtotal))} value={loyaltyPointsToRedeem} onChange={(e) => setLoyaltyPointsToRedeem(Math.max(0, Math.min(Number(e.target.value) || 0, availableLoyaltyPoints, Math.floor(subtotal))))} className="field-input min-w-0 w-full text-ink" />
             <span className="mt-1 block">1 point = EGP 1.</span>
           </label>
         </div>

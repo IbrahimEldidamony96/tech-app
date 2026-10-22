@@ -61,6 +61,11 @@ enum ShipmentStatus {
   IN_TRANSIT
   DELIVERED
   RETURNED
+  LOST
+  DAMAGED
+  CANCELLED
+  EXCEPTION
+  AWAITING_RECEIPT
 }
 
 enum InventoryMovementType {
@@ -625,6 +630,7 @@ model Order {
   items    OrderItem[]
   payment  Payment?
   shipment Shipment?
+  shipmentBooking ShipmentBooking?
   events OrderEvent[]
   returnRequests ReturnRequest[]
   refunds Refund[]
@@ -716,9 +722,57 @@ model Shipment {
 
   shippedAt   DateTime?
   deliveredAt DateTime?
+  stockRestoredAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// A booking is persisted before contacting the carrier. Ambiguous outcomes
+// block another booking until an operator reconciles the carrier dashboard.
+model ShipmentBooking {
+  id String @id @default(cuid())
+  orderId String @unique
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status String @default("REQUESTING")
+  requestKey String @unique
+  leaseUntil DateTime
+  bostaDeliveryId String?
+  trackingNumber String?
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  events ShipmentBookingEvent[]
+}
+
+// Authenticated carrier callbacks retained until a booking can be attached.
+model ShipmentBookingEvent {
+  id String @id @default(cuid())
+  bookingId String
+  booking ShipmentBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bostaDeliveryId String
+  trackingNumber String
+  rawState String
+  createdAt DateTime @default(now())
+  processedAt DateTime?
+
+  @@unique([bookingId, bostaDeliveryId, trackingNumber, rawState], map: "ShipmentBookingEvent_identity_state_key")
+}
+
+// Immutable message payload plus a recoverable lease and provider idempotency.
+model EmailDelivery {
+  key String @id
+  payload Json
+  status String @default("PENDING")
+  claimToken String?
+  leaseUntil DateTime?
+  firstAttemptAt DateTime?
+  sentAt DateTime?
+  attempts Int @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, leaseUntil])
 }
 
 // ==========================================

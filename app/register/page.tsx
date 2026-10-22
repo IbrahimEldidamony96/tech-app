@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
@@ -6,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { AuthShell } from "@/components/auth-shell";
+import { referralCodeFromQuery } from "@/lib/referral-code";
 import { safeNextPath } from "@/lib/safe-next-path";
 
 function RegisterForm() {
@@ -24,37 +26,41 @@ function RegisterForm() {
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+    try {
+      e.preventDefault();
+      setLoading(true);
+      setError("");
 
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
-    });
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, referralCode: referralCodeFromQuery(searchParams.get("ref")) }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      // Zod بيرجع أخطاء متعددة (fieldErrors) — بناخد أول واحدة نلاقيها
-      const firstFieldError = body.details?.fieldErrors
-        ? (Object.values(body.details.fieldErrors)[0] as string[] | undefined)?.[0]
-        : null;
-      setError(firstFieldError ?? body.error ?? t("registrationFailed"));
-      setLoading(false);
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        // Zod بيرجع أخطاء متعددة (fieldErrors) — بناخد أول واحدة نلاقيها
+        const firstFieldError = body.details?.fieldErrors
+          ? (Object.values(body.details.fieldErrors)[0] as string[] | undefined)?.[0]
+          : null;
+        setError(firstFieldError ?? body.error ?? t("registrationFailed"));
+        setLoading(false);
+        return;
+      }
 
-    // التسجيل نجح — بنسجّله دخول على طول بنفس البيانات، بدل ما نرجّعه
-    // لصفحة login منفصلة يكتب فيها نفس حاجة كتبها لسه
-    const result = await signIn("credentials", { email, password, redirect: false });
-    if (result?.error) {
-      router.push(`/login?next=${encodeURIComponent(next)}`);
-      return;
-    }
+      // التسجيل نجح — بنسجّله دخول على طول بنفس البيانات، بدل ما نرجّعه
+      // لصفحة login منفصلة يكتب فيها نفس حاجة كتبها لسه
+      const result = await signIn("credentials", { email, password, redirect: false });
+      if (result?.error) {
+        router.push(`/login?next=${encodeURIComponent(next)}`);
+        return;
+      }
 
-    router.push(next);
-    router.refresh();
+      router.push(next);
+      router.refresh();
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setLoading(false); }
   }
 
   return (

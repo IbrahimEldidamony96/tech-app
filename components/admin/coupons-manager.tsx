@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -26,8 +27,16 @@ function mapResponse(d:CouponResponse):CouponRow{return{id:d.id,code:d.code,type
 export function CouponsManager({initialCoupons,categories,brands,canWrite=true}:{initialCoupons:CouponRow[];categories:Choice[];brands:Choice[];canWrite?:boolean}){
  const router=useRouter();const[coupons,setCoupons]=useState(initialCoupons);const[editingId,setEditingId]=useState<string|null>(null);const[adding,setAdding]=useState(false);const[form,setForm]=useState(emptyForm);const[error,setError]=useState("");const[submitting,setSubmitting]=useState(false);
  function start(c?:CouponRow){setError("");if(c){setEditingId(c.id);setAdding(false);setForm(fromCoupon(c))}else{setEditingId(null);setAdding(true);setForm(emptyForm)}}
- async function submit(e:React.FormEvent){e.preventDefault();setSubmitting(true);setError("");const payload={code:form.code,type:form.type,value:Number(form.value),minOrderAmount:form.minOrderAmount?Number(form.minOrderAmount):null,maxDiscount:form.maxDiscount?Number(form.maxDiscount):null,usageLimit:form.usageLimit?Number(form.usageLimit):null,usageLimitPerUser:Number(form.usageLimitPerUser),startsAt:form.startsAt?new Date(form.startsAt).toISOString():null,expiresAt:form.expiresAt?new Date(form.expiresAt).toISOString():null,isActive:form.isActive,firstOrderOnly:form.firstOrderOnly,categoryId:form.categoryId||null,brandId:form.brandId||null};const res=await fetch(editingId?`/api/admin/coupons/${editingId}`:"/api/admin/coupons",{method:editingId?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});setSubmitting(false);if(!res.ok){setError((await res.json().catch(()=>({}))).error??"Could not save coupon");return;}const saved=mapResponse((await res.json()).data);setCoupons(p=>editingId?p.map(x=>x.id===editingId?saved:x):[saved,...p]);setEditingId(null);setAdding(false);router.refresh();}
- async function del(id:string){if(!confirm("Delete this coupon?"))return;const res=await fetch(`/api/admin/coupons/${id}`,{method:"DELETE"});if(res.ok)setCoupons(p=>p.filter(c=>c.id!==id));else setError("Could not delete coupon");}
+ async function submit(e:React.FormEvent){
+    try {      e.preventDefault();setSubmitting(true);setError("");const payload={code:form.code,type:form.type,value:Number(form.value),minOrderAmount:form.minOrderAmount?Number(form.minOrderAmount):null,maxDiscount:form.maxDiscount?Number(form.maxDiscount):null,usageLimit:form.usageLimit?Number(form.usageLimit):null,usageLimitPerUser:Number(form.usageLimitPerUser),startsAt:form.startsAt?new Date(form.startsAt).toISOString():null,expiresAt:form.expiresAt?new Date(form.expiresAt).toISOString():null,isActive:form.isActive,firstOrderOnly:form.firstOrderOnly,categoryId:form.categoryId||null,brandId:form.brandId||null};const res=await fetch(editingId?`/api/admin/coupons/${editingId}`:"/api/admin/coupons",{method:editingId?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});setSubmitting(false);if(!res.ok){setError((await res.json().catch(()=>({}))).error??"Could not save coupon");return;}const saved=mapResponse((await res.json()).data);setCoupons(p=>editingId?p.map(x=>x.id===editingId?saved:x):[saved,...p]);setEditingId(null);setAdding(false);router.refresh();
+    } catch { setError(requestFailureMessage()); }
+    finally { setSubmitting(false); }
+  }
+ async function del(id:string){
+    try {      if(!confirm("Delete this coupon?"))return;const res=await fetch(`/api/admin/coupons/${id}`,{method:"DELETE"});if(res.ok)setCoupons(p=>p.filter(c=>c.id!==id));else setError("Could not delete coupon");
+    } catch { setError(requestFailureMessage()); }
+
+  }
  const show=adding||editingId!==null;
  return <div className="mt-6 space-y-5">
   {canWrite&&!show?<button onClick={()=>start()} className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-paper">New coupon</button>:null}

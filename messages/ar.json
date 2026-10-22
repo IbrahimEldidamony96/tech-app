@@ -179,9 +179,11 @@
   "subtotal": "الإجمالي الفرعي",
   "proceedToCheckout": "المتابعة للدفع",
   "signInToCheckout": "سجّل الدخول للمتابعة",
-  "signInRequired": "سجّل الدخول أو أنشئ حسابًا قبل إتمام طلبك."
+  "signInRequired": "سجّل الدخول أو أنشئ حسابًا قبل إتمام طلبك.",
+  "refreshCart": "إعادة تحميل السلة"
  },
  "Checkout": {
+  "loyaltyPointsAvailable": "استخدم نقاط الولاء (المتاح {points} نقطة)",
   "title": "الدفع",
   "shippingAddress": "عنوان الشحن",
   "addNewAddress": "+ إضافة عنوان جديد",
@@ -221,6 +223,7 @@
   "restoringCart": "جارٍ تجهيز سلتك المحفوظة…",
   "restoringCartError": "تعذر تجهيز سلتك. ارجع إلى السلة وحاول مرة أخرى.",
   "errors": {
+   "insufficientLoyaltyPoints": "تغير رصيد نقاط الولاء. راجع النقاط المتاحة وحاول مرة أخرى.",
    "selectAddressFields": "من فضلك اختر المحافظة والمنطقة والحي",
    "saveAddressFailed": "تعذر حفظ العنوان",
    "selectOrAddAddress": "من فضلك اختر عنوان شحن أو أضف عنوانًا جديدًا",
@@ -233,7 +236,8 @@
    "loadDistrictsNetwork": "تعذر تحميل الأحياء — تحقق من الاتصال وحاول مرة أخرى.",
    "shippingCostFailed": "فشل حساب تكلفة الشحن",
    "shippingCostNetwork": "تعذر حساب تكلفة الشحن الآن."
-  }
+  },
+  "retryLocations": "إعادة تحميل المناطق"
  },
  "OrdersPage": {
   "title": "طلباتك",
@@ -357,7 +361,9 @@
   "verificationLinkInvalidSubheading": "تقدر تطلب رابط جديد من صفحة حسابك بعد تسجيل الدخول.",
   "verifyEmailPrompt": "بعتنالك رابط تأكيد على بريدك الإلكتروني.",
   "backToHome": "العودة للرئيسية",
-  "somethingWentWrong": "حصل خطأ. جرب تاني."
+  "somethingWentWrong": "حصل خطأ. جرب تاني.",
+  "googleAccountLinkRequired": "يوجد حساب بهذا البريد بالفعل. سجّل الدخول بكلمة المرور أو أعد تعيينها أولاً. يمكنك ربط Google بعد تسجيل الدخول وتأكيد بريدك.",
+  "googleSignInFailed": "تعذر تسجيل الدخول باستخدام Google. حاول مجدداً أو استخدم كلمة المرور."
  },
  "AdminHome": {
   "title": "لوحة التحكم",
@@ -408,7 +414,24 @@
   "moveTo": "نقل إلى {status}",
   "cancelOrder": "إلغاء الطلب",
   "noActionsLeft": "لا توجد إجراءات متاحة — وصل هذا الطلب لحالته النهائية.",
-  "actionFailed": "فشل تنفيذ الإجراء"
+  "actionFailed": "فشل تنفيذ الإجراء",
+  "transactionId": "رقم معاملة Paymob",
+  "verifyPaymentHelp": "أدخل رقم المعاملة المدفوعة من Paymob. سيتم التحقق من المبلغ وطريقة الدفع ومرجع الطلب قبل تسجيل الدفع.",
+  "verifyPayment": "التحقق من الدفع",
+  "receiptConfirmed": "استلمت جميع البضائع المتبقية وفحصتها وتأكدت من صلاحيتها للبيع. سيؤدي هذا إلى إعادتها للمخزون.",
+  "shipmentRecovery": "استعادة حجز الشحنة",
+  "shipmentRecoveryHelp": "راجع هذا الطلب في لوحة Bosta ثم حدد نتيجة الحجز. يجب تسوية الحجز الحالي قبل إنشاء شحنة أخرى.",
+  "refreshBooking": "تحديث حالة الحجز",
+  "bookingInProgress": "طلب الحجز لا يزال قيد التنفيذ. حدّث الحالة بعد قليل.",
+  "recoveryOutcome": "نتيجة المراجعة في لوحة شركة الشحن",
+  "recordExistingShipment": "تسجيل الشحنة الموجودة",
+  "noCarrierBooking": "تم التأكد من عدم وجود حجز",
+  "cancelCarrierBooking": "إلغاء الحجز المسجل لدى شركة الشحن",
+  "carrierDeliveryId": "رقم شحنة Bosta",
+  "carrierTrackingId": "رقم تتبع Bosta",
+  "recoveryReason": "السبب ودليل المراجعة (10 أحرف على الأقل)",
+  "carrierOutcomeConfirmed": "راجعت لوحة شركة الشحن وتأكدت من هذه النتيجة لهذا الطلب.",
+  "recoverShipment": "حفظ نتيجة الاستعادة"
  },
  "ShipmentStatus": {
   "PENDING": "قيد الانتظار",
@@ -416,7 +439,12 @@
   "SHIPPED": "تم الشحن",
   "IN_TRANSIT": "في الطريق",
   "DELIVERED": "تم التوصيل",
-  "RETURNED": "مرتجع"
+  "RETURNED": "مرتجع",
+  "LOST": "مفقودة",
+  "DAMAGED": "تالفة",
+  "CANCELLED": "ملغاة من شركة الشحن",
+  "EXCEPTION": "مشكلة لدى شركة الشحن",
+  "AWAITING_RECEIPT": "بانتظار الاستلام والفحص"
  },
  "AdminCategories": {
   "title": "الفئات",
@@ -518,6 +546,7 @@
   "addValueFailed": "فشل إضافة القيمة"
  },
  "AdminVariants": {
+  "invalidSaleDate": "اختر تاريخًا ووقتًا محليًا صالحًا. قد يكون هذا الوقت غير موجود بسبب التوقيت الصيفي.",
   "title": "المتغيرات",
   "noVariants": "لا توجد متغيرات — هذا المنتج بدون سعر أو مخزون حتى تضيف واحدًا بالأسفل.",
   "sku": "رمز المنتج (SKU)",

@@ -9,6 +9,8 @@ import { loginSchema } from "@/lib/validations/auth";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import authConfig from "./auth.config";
 import { mayUseSession } from "@/lib/session-policy";
+import { hasAuthSessionCookie, mayLinkGoogleEmail } from "@/lib/google-link-policy";
+import { cookies } from "next/headers";
 
 // الرسالة دي بتتحط في الـ URL كـ error code بعد الـ redirect
 // (/login?error=CredentialsSignin&code=too_many_attempts) — الفرونت إند
@@ -69,13 +71,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // هنا تاني كانت هتبقى نسخة ثانية تقدر تتنسى لما حد يغيّر القيمة في
   // auth.config.ts بعدين (بالظبط نوع الباج اللي ده كان بيحله في الأول).
   providers: [
-    // *** باج كان موجود: حد سجّل بباسورد الأول، وبعدين حاول يدخل بجوجل
-    // بنفس الإيميل، كان بياخد خطأ OAuthAccountNotLinked من غير أي طريقة
-    // يربط بيها الحسابين. allowDangerousEmailAccountLinking هي الآلية
-    // الرسمية الموثّقة من Auth.js لنفس السيناريو ده بالذات — "خطير" بس
-    // لمزوّدين مش بيتحققوا من ملكية الإيميل؛ جوجل بيتحقق من الإيميل قبل
-    // أي OAuth تسجيل دخول، فربط الحسابات بالإيميل هنا آمن.
-    Google({ allowDangerousEmailAccountLinking: true }),
+    // Existing credentials accounts require authenticated, verified linking.
+    // Matching email alone must never preserve an attacker's password/session.
+    Google({ allowDangerousEmailAccountLinking: false }),
     Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
@@ -89,6 +87,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // Edge auth.config.ts remains Prisma-free. It is only the first gate.
   callbacks: {
     ...authConfig.callbacks,
+    async signIn({ account, profile }) {
+      if (account?.provider !== "google") return true;
+      if (!mayLinkGoogleEmail(profile, null)) return false;
+      const hasSession = hasAuthSessionCookie((await cookies()).getAll());
+      const current = await auth();
+      // Auth.js links using the raw JWT's sub without our sessionVersion
+      // callback. A revoked cookie must never become a new linking session.
+      if (!current?.user) return mayLinkGoogleEmail(profile, null, hasSession);
+      // Linking is allowed only from a verified local session for the same
+      // mailbox. Unsigned-in matching accounts require password recovery first.
+      const local = await prisma.user.findUnique({ where: { id: current.user.id }, select: { email: true, emailVerified: true } });
+      return !!local && mayLinkGoogleEmail(profile, local, hasSession);
+    },
     async jwt({ token, user, account, trigger, session }) {
       const id = user?.id ?? token.id;
       if (typeof id !== "string" || !id) return null;

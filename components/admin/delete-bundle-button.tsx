@@ -1,4 +1,9 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-export function DeleteBundleButton({id}:{id:string}){const r=useRouter();const[busy,setBusy]=useState(false);return <button disabled={busy} onClick={async()=>{if(!confirm("Delete this bundle?"))return;setBusy(true);const res=await fetch(`/api/admin/bundles/${id}`,{method:"DELETE"});setBusy(false);if(res.ok)r.refresh();else alert("Delete failed");}} className="text-xs text-alert disabled:opacity-50">{busy?"…":"Delete"}</button>}
+export function DeleteBundleButton({id}:{id:string}){const r=useRouter();const[busy,setBusy]=useState(false);return <button disabled={busy} onClick={async()=>{
+    try {      if(!confirm("Delete this bundle?"))return;setBusy(true);const res=await fetch(`/api/admin/bundles/${id}`,{method:"DELETE"});setBusy(false);if(res.ok)r.refresh();else alert("Delete failed");
+    } catch { window.alert(requestFailureMessage()); }
+    finally { setBusy(false); }
+  }} className="text-xs text-alert disabled:opacity-50">{busy?"…":"Delete"}</button>}

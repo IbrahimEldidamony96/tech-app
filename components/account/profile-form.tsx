@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
@@ -21,30 +22,34 @@ export function ProfileForm({
   const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-    setSuccess(false);
+    try {
+      e.preventDefault();
+      setSubmitting(true);
+      setError("");
+      setSuccess(false);
 
-    const res = await fetch("/api/account", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, image: image || undefined }),
-    });
+      const res = await fetch("/api/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, image: image || undefined }),
+      });
 
-    const body = await res.json().catch(() => ({}));
+      const body = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setError(body.error ?? t("profileUpdateFailed"));
+      if (!res.ok) {
+        setError(body.error ?? t("profileUpdateFailed"));
+        setSubmitting(false);
+        return;
+      }
+
+      // بيحدّث الـ JWT/session فورًا (jwt callback بيقرا trigger: "update")
+      // من غير ما اليوزر يحتاج يعمل logout/login عشان يشوف اسمه الجديد
+      await update({ name: body.data.name, image: body.data.image });
+      setSuccess(true);
       setSubmitting(false);
-      return;
-    }
 
-    // بيحدّث الـ JWT/session فورًا (jwt callback بيقرا trigger: "update")
-    // من غير ما اليوزر يحتاج يعمل logout/login عشان يشوف اسمه الجديد
-    await update({ name: body.data.name, image: body.data.image });
-    setSuccess(true);
-    setSubmitting(false);
+    } catch { setError(requestFailureMessage()); }
+    finally { setSubmitting(false); }
   }
 
   return (

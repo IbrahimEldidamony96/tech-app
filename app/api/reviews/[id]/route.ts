@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/require-user";
 import { updateReviewSchema } from "@/lib/validations/review";
-import { syncProductRating } from "@/lib/product-maintenance";
+import { withProductReviewLock } from "@/lib/product-maintenance";
 import { hasPermission } from "@/lib/permissions";
 
 type Params = { params: Promise<{ id: string }> };
@@ -37,13 +37,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Review not found" }, { status: 404 });
   }
 
-  const updated = await prisma.review.update({
+  const updated = await withProductReviewLock(review.productId, tx => tx.review.update({
     where: { id },
     data: parsed.data,
     select: { id: true, rating: true, comment: true, updatedAt: true },
-  });
+  }));
 
-  await syncProductRating(review.productId);
   return NextResponse.json({ data: updated });
 }
 
@@ -69,8 +68,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     }
   }
 
-  await prisma.review.delete({ where: { id } });
-  await syncProductRating(review.productId);
+  await withProductReviewLock(review.productId, tx => tx.review.delete({ where: { id } }));
 
   return NextResponse.json({ data: { id, deleted: true } });
 }

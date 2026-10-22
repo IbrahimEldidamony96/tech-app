@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -12,20 +13,24 @@ export function CancelOrderButton({ orderId }: { orderId: string }) {
   const [error, setError] = useState("");
 
   async function handleCancel() {
-    setLoading(true);
-    setError("");
+    try {
+      setLoading(true);
+      setError("");
 
-    const res = await fetch(`/api/orders/${orderId}/cancel`, { method: "POST" });
-    const body = await res.json().catch(() => ({}));
+      const res = await fetch(`/api/orders/${orderId}/cancel`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setError(body.error ?? t("cancelFailed"));
-      setLoading(false);
-      setConfirming(false);
-      return;
-    }
+      if (!res.ok) {
+        setError(body.error ?? t("cancelFailed"));
+        setLoading(false);
+        setConfirming(false);
+        return;
+      }
 
-    router.refresh();
+      router.refresh();
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setLoading(false); }
   }
 
   if (confirming) {

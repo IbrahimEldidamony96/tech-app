@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -6,12 +7,16 @@ export function ProductArchiveButton({ productId, archived = false }: { productI
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   async function act() {
-    if (!archived && !confirm("Archive this product? Existing orders will be preserved.")) return;
-    setBusy(true);
-    const res = await fetch(archived ? `/api/products/${productId}/restore` : `/api/products/${productId}`, { method: archived ? "POST" : "DELETE" });
-    setBusy(false);
-    if (res.ok) router.refresh();
-    else alert((await res.json().catch(() => ({}))).error ?? "Action failed");
+    try {
+      if (!archived && !confirm("Archive this product? Existing orders will be preserved.")) return;
+      setBusy(true);
+      const res = await fetch(archived ? `/api/products/${productId}/restore` : `/api/products/${productId}`, { method: archived ? "POST" : "DELETE" });
+      setBusy(false);
+      if (res.ok) router.refresh();
+      else alert((await res.json().catch(() => ({}))).error ?? "Action failed");
+
+    } catch { window.alert(requestFailureMessage()); }
+    finally { setBusy(false); }
   }
   return <button type="button" disabled={busy} onClick={act} className="text-xs font-medium text-alert hover:underline disabled:opacity-50">{busy ? "…" : archived ? "Restore" : "Archive"}</button>;
 }

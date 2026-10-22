@@ -10,6 +10,8 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin();
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@react-pdf/renderer"],
+  outputFileTracingIncludes: { "/api/orders/*/invoice": ["./assets/fonts/**/*"] },
   typedRoutes: false,
   async headers() {
     // Historical guest links may still contain ?token=... on their first

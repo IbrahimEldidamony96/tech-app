@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -11,10 +12,14 @@ export function BundleManager({ products }: { products: Product[] }) {
   const [form,setForm]=useState({nameEn:"",nameAr:"",slug:"",discountType:"PERCENTAGE" as "PERCENTAGE"|"FIXED",discountValue:"",startsAt:"",endsAt:""});
   const [items,setItems]=useState<Item[]>([{productId:"",quantity:1},{productId:"",quantity:1}]);
   const updateItem=(i:number,patch:Partial<Item>)=>setItems(p=>p.map((x,idx)=>idx===i?{...x,...patch}:x));
-  async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);setError("");
-    const res=await fetch("/api/admin/bundles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...form,discountValue:Number(form.discountValue),startsAt:form.startsAt?new Date(form.startsAt).toISOString():null,endsAt:form.endsAt?new Date(form.endsAt).toISOString():null,items})});
-    setBusy(false); if(!res.ok){const b=await res.json().catch(()=>({}));setError(b.error??"Could not create bundle");return;}
-    setOpen(false);setForm({nameEn:"",nameAr:"",slug:"",discountType:"PERCENTAGE",discountValue:"",startsAt:"",endsAt:""});setItems([{productId:"",quantity:1},{productId:"",quantity:1}]);router.refresh();
+  async function submit(e:React.FormEvent){
+    try {      e.preventDefault();setBusy(true);setError("");
+          const res=await fetch("/api/admin/bundles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...form,discountValue:Number(form.discountValue),startsAt:form.startsAt?new Date(form.startsAt).toISOString():null,endsAt:form.endsAt?new Date(form.endsAt).toISOString():null,items})});
+          setBusy(false); if(!res.ok){const b=await res.json().catch(()=>({}));setError(b.error??"Could not create bundle");return;}
+          setOpen(false);setForm({nameEn:"",nameAr:"",slug:"",discountType:"PERCENTAGE",discountValue:"",startsAt:"",endsAt:""});setItems([{productId:"",quantity:1},{productId:"",quantity:1}]);router.refresh();
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setBusy(false); }
   }
   if(!open)return <button onClick={()=>setOpen(true)} className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-paper">New bundle</button>;
   return <form onSubmit={submit} className="mt-4 grid gap-3 rounded-lg border border-steel/15 p-4 sm:grid-cols-2">

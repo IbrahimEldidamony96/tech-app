@@ -12,6 +12,10 @@ import { getOrCreateWishlist } from "../lib/wishlist";
 import { applyBostaWebhookStatus } from "../lib/shipment-service";
 import { getProductList } from "../lib/queries/products";
 import { getWishlistForUser } from "../lib/queries/wishlist";
+import { mapBostaState } from "../lib/bosta";
+import { withProductReviewLock } from "../lib/product-maintenance";
+import { issueVerificationToken, consumeVerificationToken } from "../lib/verification-tokens";
+import bcrypt from "bcryptjs";
 import type { Prisma } from "../app/generated/prisma/client";
 
 assert.ok(process.env.TEST_DATABASE_URL, "An isolated test database is required");
@@ -31,6 +35,7 @@ let variantId = "";
 let serverOutput = "";
 const orders: string[] = [];
 const products: string[] = [];
+const extraUsers: string[] = [];
 
 async function listen(server: Server) {
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -79,6 +84,9 @@ before(async () => {
   // Every provider request is directed to this local fixture, never a live account.
   provider = createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
+    if (req.url === "/api/v2/cities?apiVersion=1") return void res.end(JSON.stringify({ data: [{ _id: "fixture-city", name: "Cairo" }] }));
+    if (req.url === "/api/v2/cities/fixture-city/zones?apiVersion=1") return void res.end(JSON.stringify({ data: [{ _id: "fixture-zone", name: "Nasr City" }] }));
+    if (req.url === "/api/v2/cities/fixture-city/districts?apiVersion=1") return void res.end(JSON.stringify({ data: [{ zoneId: "fixture-zone", zoneName: "Nasr City", districtId: "fixture-district", districtName: "District 1" }] }));
     if (req.url === "/api/auth/tokens") return void res.end(JSON.stringify({ token: "test-only-provider-token" }));
     const id = req.url?.match(/^\/api\/acceptance\/transactions\/(\d+)\?token=test-only-provider-token$/)?.[1];
     const transaction = id && providerTransactions.get(id);
@@ -97,7 +105,8 @@ before(async () => {
     PAYMOB_PUBLIC_KEY: "test-only-public", PAYMOB_HMAC_SECRET: secret, PAYMOB_API_KEY: "test-only-api",
     PAYMOB_INTEGRATION_ID_CARD: "7", PAYMOB_INTEGRATION_ID_WALLET: "8",
     BOSTA_BASE_URL: `http://127.0.0.1:${providerPort}`, BOSTA_API_KEY: "test-only-bosta",
-    RESEND_API_KEY: "", NODE_ENV: "production",
+    BOSTA_WEBHOOK_SECRET: secret,
+    RESEND_API_KEY: "", NODE_ENV: "production", CRON_SECRET: secret,
   };
   const serverProcess = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", String(port)], {
     env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
@@ -132,6 +141,8 @@ after(async () => {
   if (provider) await new Promise<void>(resolve => provider.close(() => resolve()));
   try {
     // Cleanup is restricted to exact IDs created by this suite.
+    await prisma.emailDelivery.deleteMany({ where: { key: { startsWith: prefix } } });
+    await prisma.review.deleteMany({ where: { productId: { in: products } } });
     await prisma.refund.deleteMany({ where: { orderId: { in: orders } } });
     await prisma.returnRequest.deleteMany({ where: { orderId: { in: orders } } });
     await prisma.payment.deleteMany({ where: { orderId: { in: orders } } });
@@ -139,7 +150,7 @@ after(async () => {
     await prisma.order.deleteMany({ where: { id: { in: orders } } });
     await prisma.inventoryMovement.deleteMany({ where: { variant: { productId: { in: products } } } });
     await prisma.auditLog.deleteMany({ where: { actorId: userId || "no-fixture" } });
-    await prisma.user.deleteMany({ where: { id: userId || "no-fixture" } });
+    await prisma.user.deleteMany({ where: { id: { in: [userId, ...extraUsers] } } });
     await prisma.product.deleteMany({ where: { id: { in: products } } });
     await prisma.category.deleteMany({ where: { id: categoryId || "no-fixture" } });
   } finally {
@@ -147,6 +158,42 @@ after(async () => {
     await (globalThis as { pgPool?: Pool }).pgPool?.end();
   }
 }, { timeout: 60000 });
+
+test("password changes revoke earlier reset links and serialize token issuance", async () => {
+  const oldPassword = "Old-regression-password-1!";
+  const newPassword = "New-regression-password-2!";
+  const customer = await prisma.user.create({ data: { name: prefix, email: `${prefix}-password@example.invalid`, password: await bcrypt.hash(oldPassword, 10) } });
+  extraUsers.push(customer.id);
+  const resetToken = await issueVerificationToken(customer.id, "PASSWORD_RESET");
+  const token = await encode({ secret, salt: "authjs.session-token", maxAge: 3600, token: {
+    id: customer.id, sub: customer.id, email: customer.email, role: "CUSTOMER", sessionVersion: 0,
+    authenticatedAt: Date.now(), authProvider: "credentials",
+  } });
+  const response = await fetch(`${origin}/api/account/password`, { method: "PATCH",
+    headers: { cookie: `authjs.session-token=${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword: oldPassword, newPassword }),
+  });
+  assert.equal(response.status, 200, await response.text());
+  await request("/api/auth/reset-password", "POST", { token: resetToken, password: "Attacker-password-3!" }, 400);
+  const current = await prisma.user.findUniqueOrThrow({ where: { id: customer.id } });
+  assert.equal(await bcrypt.compare(newPassword, current.password!), true);
+  assert.equal(current.sessionVersion, 1);
+
+  // Hold User before issuing a token in another connection. Issuance must
+  // wait until revocation commits, rather than inserting into its snapshot.
+  let pending!: Promise<string>;
+  let issued = false;
+  await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${customer.id} FOR UPDATE`;
+    pending = issueVerificationToken(customer.id, "PASSWORD_RESET").then(value => { issued = true; return value; });
+    await delay(100);
+    assert.equal(issued, false, "Issuance must wait for the password-operation lock");
+    await tx.verificationToken.updateMany({ where: { userId: customer.id, type: "PASSWORD_RESET", usedAt: null }, data: { usedAt: new Date() } });
+  });
+  const freshToken = await pending;
+  assert.ok(await consumeVerificationToken(freshToken, "PASSWORD_RESET"));
+  assert.equal(await consumeVerificationToken(freshToken, "PASSWORD_RESET"), null);
+});
 
 test("concurrent first cart and wishlist requests create one container", async () => {
   const carts = await Promise.all(Array.from({ length: 8 }, () => getOrCreateCart(userId)));
@@ -283,6 +330,9 @@ test("cancelled paid orders retain cancelled intents and reconcile replacement r
   await prisma.shipment.update({ where: { orderId: target.id }, data: { status: "SHIPPED" } });
   const stock = (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock;
   await Promise.all([1, 2].map(() => applyBostaWebhookStatus(target.id, target, "RETURNED", "returned")));
+  assert.equal((await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock, stock);
+  await request(`/api/admin/orders/${target.id}/shipment`, "PATCH", { status: "RETURNED" }, 400);
+  await request(`/api/admin/orders/${target.id}/shipment`, "PATCH", { status: "RETURNED", receiptConfirmed: true });
   assert.equal((await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock, stock + 1);
   const path = `/api/admin/orders/${target.id}/refund`;
   await request(path, "POST", { amount: "25.00" }, 409);
@@ -374,4 +424,278 @@ test("Paymob callback binds the signed provider order to authenticated merchant 
   const wrongIntegration = capture(transactionBase + 3, wallet.id);
   providerTransactions.set(String(wrongIntegration.id), wrongIntegration);
   await request(`/api/webhooks/paymob?hmac=${hmac(wrongIntegration)}`, "POST", { obj: wrongIntegration }, 409);
+});
+
+test("lost and damaged shipments withhold inventory until an inspected physical receipt", async () => {
+  for (const code of [100, 101, 48, 49, 46]) {
+    const target = await order({ status: "SHIPPED" });
+    await prisma.shipment.update({ where: { orderId: target.id }, data: { status: "SHIPPED" } });
+    const stock = (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock;
+    const status = mapBostaState(code)!;
+    await Promise.all([1, 2].map(() => applyBostaWebhookStatus(target.id, target, status, String(code))));
+    assert.equal((await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock, stock);
+    assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: target.id } })).status, "CANCELLED");
+    if (status !== "AWAITING_RECEIPT") await request(`/api/admin/orders/${target.id}/shipment`, "PATCH", { status: "AWAITING_RECEIPT" });
+    await request(`/api/admin/orders/${target.id}/shipment`, "PATCH", { status: "RETURNED", receiptConfirmed: true });
+    await applyBostaWebhookStatus(target.id, target, "AWAITING_RECEIPT", "46");
+    assert.equal((await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock, stock + 1);
+    assert.equal(await prisma.inventoryMovement.count({ where: { referenceId: target.id, type: "RETURN" } }), 1);
+  }
+});
+
+test("manual online capture requires provider verification and repairs a legacy payment reference", async () => {
+  const target = await order({ status: "CONFIRMED", paymentStatus: "PAID" }, { method: "CARD", status: "PAID" });
+  const payload = capture(transactionBase + 10, target.id);
+  providerTransactions.set(String(payload.id), payload);
+  const path = `/api/admin/orders/${target.id}/payment/mark-paid`;
+  await request(path, "POST", {}, 400);
+  await request(path, "POST", { transactionId: String(payload.id) });
+  await request(`/api/webhooks/paymob?hmac=${hmac(payload)}`, "POST", { obj: payload });
+  const current = await prisma.payment.findUniqueOrThrow({ where: { orderId: target.id } });
+  assert.equal(current.transactionId, String(payload.id));
+  assert.equal(await prisma.orderEvent.count({ where: { orderId: target.id, title: "Payment reference reconciled" } }), 1);
+  assert.equal(await prisma.notification.count({ where: { userId, type: "PAYMENT", link: `/orders/${target.id}` } }), 0);
+  const other = await order({}, { method: "CARD" });
+  await request(`/api/admin/orders/${other.id}/payment/mark-paid`, "POST", { transactionId: String(payload.id) }, 409);
+  assert.equal((await prisma.payment.findUniqueOrThrow({ where: { orderId: other.id } })).status, "PENDING");
+});
+
+test("unresolved booking blocks cancellation and concurrent recovery resolves it once", async () => {
+  const target = await order({ status: "PROCESSING" });
+  await prisma.shipment.delete({ where: { orderId: target.id } });
+  await prisma.shipmentBooking.create({ data: { orderId: target.id, status: "UNKNOWN", requestKey: randomUUID(), leaseUntil: new Date(0) } });
+  await request(`/api/admin/orders/${target.id}/cancel`, "POST", undefined, 409);
+  await request(`/api/admin/orders/${target.id}/shipment`, "POST", undefined, 409);
+  const body = { action: "NO_BOOKING", attested: true, reason: "Verified absence in carrier dashboard" };
+  const responses = await Promise.all([1, 2].map(() => fetch(`${origin}/api/admin/orders/${target.id}/shipment`, { method: "PATCH", headers: { cookie, "Content-Type": "application/json" }, body: JSON.stringify(body) })));
+  assert.deepEqual(responses.map(row => row.status).sort(), [200, 409]);
+  assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: target.id } })).status, "CONFIRMED");
+  assert.equal((await prisma.shipmentBooking.findUniqueOrThrow({ where: { orderId: target.id } })).status, "CANCELLED");
+});
+
+test("callbacks survive booking recovery, verify identities and settle COD exactly once", async () => {
+  const target = await order({ status: "PROCESSING" });
+  await prisma.shipment.delete({ where: { orderId: target.id } });
+  const delivery = `${prefix}-recovery-delivery`, tracking = `${prefix}-recovery-tracking`;
+  const booking = await prisma.shipmentBooking.create({ data: { orderId: target.id, status: "UNKNOWN", requestKey: randomUUID(),
+    leaseUntil: new Date(0), bostaDeliveryId: delivery, trackingNumber: tracking } });
+  const stock = (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock;
+  async function callback(data: Record<string, unknown>, authenticated = true) {
+    const response = await fetch(`${origin}/api/webhooks/bosta`, { method: "POST",
+      headers: { "Content-Type": "application/json", ...(authenticated ? { "x-webhook-secret": secret } : {}) },
+      body: JSON.stringify({ _id: delivery, trackingNumber: tracking, businessReference: target.id, state: 45, ...data }) });
+    assert.equal(response.status, authenticated ? 200 : 401, await response.text());
+  }
+  await callback({}, false);
+  await callback({ _id: "wrong-delivery" });
+  assert.equal(await prisma.shipmentBookingEvent.count({ where: { bookingId: booking.id } }), 0);
+  await Promise.all([callback({}), callback({})]);
+  assert.equal(await prisma.shipmentBookingEvent.count({ where: { bookingId: booking.id, processedAt: null } }), 1);
+  await request(`/api/admin/orders/${target.id}/shipment`, "PATCH", { action: "ATTACH", attested: true, reason: "Verified carrier delivery",
+    bostaDeliveryId: delivery, trackingNumber: "wrong-tracking" }, 409);
+  await request(`/api/admin/orders/${target.id}/shipment`, "PATCH", { action: "ATTACH", attested: true, reason: "Verified carrier delivery",
+    bostaDeliveryId: delivery, trackingNumber: tracking });
+  await Promise.all([callback({}), callback({ state: 30 })]);
+  assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: target.id } })).status, "DELIVERED");
+  assert.equal((await prisma.shipment.findUniqueOrThrow({ where: { orderId: target.id } })).status, "DELIVERED");
+  assert.equal((await prisma.payment.findUniqueOrThrow({ where: { orderId: target.id } })).status, "PAID");
+  assert.equal(await prisma.shipmentBookingEvent.count({ where: { bookingId: booking.id, processedAt: null } }), 0);
+  assert.equal(await prisma.loyaltyTransaction.count({ where: { idempotencyKey: `delivery-earn:${target.id}` } }), 1);
+  assert.equal((await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock, stock);
+});
+
+test("callbacks can recognize an in-flight attempt by its order reference", async () => {
+  const target = await order({ status: "PROCESSING" });
+  await prisma.shipment.delete({ where: { orderId: target.id } });
+  const booking = await prisma.shipmentBooking.create({ data: { orderId: target.id, requestKey: randomUUID(), leaseUntil: new Date(0) } });
+  const delivery = `${prefix}-early-delivery`, tracking = `${prefix}-early-tracking`;
+  const response = await fetch(`${origin}/api/webhooks/bosta`, { method: "POST", headers: { "Content-Type": "application/json", "x-webhook-secret": secret },
+    body: JSON.stringify({ _id: delivery, trackingNumber: tracking, businessReference: target.id, state: 45 }) });
+  assert.equal(response.status, 200);
+  assert.equal(await prisma.shipmentBookingEvent.count({ where: { bookingId: booking.id } }), 1);
+  await request(`/api/admin/orders/${target.id}/shipment`, "PATCH", { action: "NO_BOOKING", attested: true, reason: "Must retain known carrier booking" }, 409);
+  await request(`/api/admin/orders/${target.id}/shipment`, "PATCH", { action: "ATTACH", attested: true, reason: "Attach known carrier booking", bostaDeliveryId: delivery, trackingNumber: tracking });
+  assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: target.id } })).status, "DELIVERED");
+});
+
+test("both variant routes enforce option ownership and record opening balances atomically", async () => {
+  const target = await prisma.product.create({ data: { nameEn: prefix, nameAr: prefix, slug: `${prefix}-variants`, categoryId } });
+  products.push(target.id);
+  const own = await prisma.productOption.create({ data: { productId: target.id, nameEn: "Color", nameAr: "لون",
+    values: { create: [{ valueEn: "Black", valueAr: "أسود" }, { valueEn: "White", valueAr: "أبيض" }] } }, include: { values: true } });
+  const foreign = await prisma.productOption.create({ data: { productId, nameEn: `${prefix}-foreign`, nameAr: prefix,
+    values: { create: { valueEn: "Other", valueAr: "آخر" } } }, include: { values: true } });
+  const paths = [`/api/products/${target.id}/variants`, `/api/admin/products/${target.id}/options/variants`];
+  for (const [index, path] of paths.entries()) {
+    const body = { sku: `${prefix}-created-${index}`, price: 60 - index * 10, stock: 3 };
+    for (const ids of [[foreign.values[0].id], [own.values[0].id, own.values[0].id], own.values.map(v => v.id), ["missing-value"]]) {
+      await request(path, "POST", { ...body, optionValueIds: ids }, 400);
+    }
+    const created = (await request(path, "POST", { ...body, optionValueIds: [own.values[index].id] }, 201)).data;
+    const movement = await prisma.inventoryMovement.findFirstOrThrow({ where: { variantId: created.id } });
+    assert.equal(movement.quantityDelta, 3);
+    assert.equal(movement.stockAfter, 3);
+    assert.equal(await prisma.auditLog.count({ where: { entityId: created.id, action: "CREATE" } }), 1);
+    assert.equal(Number((await prisma.product.findUniqueOrThrow({ where: { id: target.id } })).startingPrice), body.price);
+    await request(path, "POST", { ...body, sku: `${body.sku}-duplicate`, optionValueIds: [own.values[index].id] }, 409);
+  }
+  for (const base of [`/api/products/${target.id}`, `/api/admin/products/${target.id}`]) {
+    await request(`${base}/options/${foreign.id}/values`, "POST", { valueEn: "Invalid", valueAr: "غير صالح" }, 404);
+  }
+  const third = await prisma.productOptionValue.create({ data: { optionId: own.id, valueEn: "Blue", valueAr: "أزرق" } });
+  const responses = await Promise.all(paths.map((path, i) => fetch(`${origin}${path}`, { method: "POST", headers: { cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ sku: `${prefix}-race-${i}`, price: 40, stock: 2, optionValueIds: [third.id] }) })));
+  assert.deepEqual(responses.map(res => res.status).sort(), [201, 409]);
+});
+
+test("insufficient loyalty points return a conflict and preserve cart, stock and balance", async () => {
+  const address = await prisma.address.create({ data: { userId, firstName: "Test", lastName: "Customer", phone: "01000000000",
+    country: "Egypt", governorate: "Cairo", city: "Nasr City", street: "Fixture street", bostaCityId: "fixture-city", bostaDistrictId: "fixture-district" } });
+  const cart = await getOrCreateCart(userId);
+  await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+  await prisma.cartItem.create({ data: { cartId: cart.id, variantId, quantity: 1 } });
+  const before = await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } });
+  const customer = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  await prisma.user.update({ where: { id: userId }, data: { loyaltyPoints: 0 } });
+  const checkoutKey = randomUUID();
+  try {
+    const result = await request("/api/checkout", "POST", { addressId: address.id, paymentMethod: "CASH_ON_DELIVERY", loyaltyPointsToRedeem: 10, checkoutKey }, 409);
+    assert.equal(result.code, "INSUFFICIENT_LOYALTY_POINTS");
+    assert.equal(result.loyaltyPoints, 0);
+    assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).loyaltyPoints, 0);
+    assert.equal((await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock, before.stock);
+    assert.equal((await prisma.cartItem.findUniqueOrThrow({ where: { cartId_variantId: { cartId: cart.id, variantId } } })).quantity, 1);
+    assert.equal(await prisma.order.count({ where: { checkoutKey } }), 0);
+    assert.equal(await prisma.loyaltyTransaction.count({ where: { referenceType: "CHECKOUT", referenceId: checkoutKey } }), 0);
+  } finally {
+    await prisma.user.update({ where: { id: userId }, data: { loyaltyPoints: customer.loyaltyPoints } });
+    await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+  }
+});
+
+test("address default updates accept null fields and reject stale carrier locations", async () => {
+  const input = { firstName: "Fixture", lastName: "Customer", phone: "01000000000", country: "Egypt", governorate: "Cairo", city: "Nasr City", street: "Fixture street", apartment: null, postalCode: null, buildingNo: null, area: null, bostaCityId: null, bostaDistrictId: null, isDefault: false };
+  const first = (await request("/api/addresses", "POST", input, 201)).data;
+  const second = (await request("/api/addresses", "POST", { ...input, street: "Second street" }, 201)).data;
+  await request(`/api/addresses/${second.id}`, "PATCH", { ...second, isDefault: true });
+  assert.equal(await prisma.address.count({ where: { userId, isDefault: true } }), 1);
+  assert.equal((await prisma.address.findUniqueOrThrow({ where: { id: first.id } })).isDefault, false);
+  await request(`/api/addresses/${second.id}`, "PATCH", { ...second, bostaCityId: "fixture-city", bostaDistrictId: "old-district" }, 400);
+  await request(`/api/addresses/${second.id}`, "PATCH", { ...second, bostaCityId: "fixture-city", bostaDistrictId: "fixture-district" });
+  await request(`/api/addresses/${second.id}`, "PATCH", { ...second, governorate: "Giza", bostaCityId: "fixture-city", bostaDistrictId: "fixture-district" }, 400);
+});
+
+test("referral registrations retain their referrer in the database", async () => {
+  const referralCode = randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase();
+  await prisma.user.update({ where: { id: userId }, data: { referralCode } });
+  const result = await request("/api/auth/register", "POST", { name: prefix, email: `${prefix}-referred@example.invalid`, password: "FixturePassword123!", referralCode }, 201);
+  extraUsers.push(result.data.id);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: result.data.id } })).referredById, userId);
+});
+
+test("wishlist and history HTTP results use sale prices and hide archived products", async () => {
+  await request("/api/wishlist", "PUT", { productId, saved: true });
+  await request("/api/wishlist", "PUT", { productId, saved: true });
+  assert.equal(await prisma.wishlistItem.count({ where: { productId, wishlist: { userId } } }), 1);
+  await request("/api/recently-viewed", "POST", { productId });
+  for (const path of ["/api/wishlist", "/api/recently-viewed"]) {
+    const found = (await request(path)).data.find((row: { product: { id: string } }) => row.product.id === productId);
+    assert.equal(found.product.variants[0].effectivePrice, 600);
+    assert.equal(found.product.variants[0].saleActive, true);
+  }
+  await prisma.product.update({ where: { id: productId }, data: { deletedAt: new Date() } });
+  try {
+    for (const path of ["/api/wishlist", "/api/recently-viewed"]) assert.equal((await request(path)).data.some((row: { product: { id: string } }) => row.product.id === productId), false);
+  } finally { await prisma.product.update({ where: { id: productId }, data: { deletedAt: null } }); }
+  await request("/api/wishlist", "DELETE", { productId });
+  await request("/api/wishlist", "DELETE", { productId });
+});
+
+test("concurrent review mutations keep the persisted rating equal to the committed reviews", async () => {
+  const other = await prisma.user.create({ data: { name: prefix, email: `${prefix}-review@example.invalid` } });
+  extraUsers.push(other.id);
+  const firstOrder = await order({ status: "DELIVERED" });
+  const secondOrder = await order({ status: "DELIVERED", userId: other.id });
+  const reviews = await Promise.all([[userId, firstOrder.items[0].id, 5], [other.id, secondOrder.items[0].id, 1]].map(([reviewUser, orderItemId, rating]) => withProductReviewLock(productId, tx => tx.review.create({ data: { userId: String(reviewUser), orderItemId: String(orderItemId), productId, rating: Number(rating) } }))));
+  let product = await prisma.product.findUniqueOrThrow({ where: { id: productId } });
+  assert.equal(product.reviewCount, 2);
+  assert.equal(product.averageRating.toNumber(), 3);
+  await Promise.all([request(`/api/reviews/${reviews[0].id}`, "PATCH", { rating: 4 }), request(`/api/reviews/${reviews[1].id}`, "DELETE")]);
+  const aggregate = await prisma.review.aggregate({ where: { productId }, _avg: { rating: true }, _count: true });
+  product = await prisma.product.findUniqueOrThrow({ where: { id: productId } });
+  assert.equal(product.reviewCount, aggregate._count);
+  assert.equal(product.averageRating.toNumber(), aggregate._avg.rating);
+});
+
+test("email leases and immutable provider keys survive overlap, completion failure and expired retries", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousKey = process.env.RESEND_API_KEY;
+  process.env.RESEND_API_KEY = "re_test_fixture";
+  const accepted = new Map<string, string>();
+  const calls: { key: string; payload: string }[] = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (!url.startsWith("https://api.resend.com/")) return originalFetch(input, init);
+    const key = new Headers(init?.headers).get("idempotency-key");
+    assert.ok(key);
+    const payload = String(init?.body);
+    calls.push({ key, payload });
+    if (accepted.has(key)) assert.equal(accepted.get(key), payload);
+    else accepted.set(key, payload);
+    await delay(100);
+    return Response.json({ id: "fixture-message" });
+  };
+  try {
+    const { deliverEmail } = await import("../lib/email-delivery");
+    const payload = { to: "fixture@example.invalid", subject: "Fixture", html: "<p>Fixture</p>" };
+    const notification = await prisma.notification.create({ data: { userId, type: "ORDER", title: prefix, message: prefix } });
+    const complete = (tx: Prisma.TransactionClient) => tx.notification.updateMany({ where: { id: notification.id, emailSentAt: null }, data: { emailSentAt: new Date() } });
+    const key = prefix + "/email-overlap";
+    await Promise.all([1, 2, 3].map(() => deliverEmail(key, payload, complete)));
+    assert.equal(calls.filter(row => row.key === key).length, 1);
+    assert.ok((await prisma.notification.findUniqueOrThrow({ where: { id: notification.id } })).emailSentAt);
+    const retryKey = prefix + "/email-retry";
+    await assert.rejects(() => deliverEmail(retryKey, payload, async () => { throw new Error("Injected completion failure"); }));
+    await deliverEmail(retryKey, { ...payload, subject: "Changed after first attempt" }, complete);
+    assert.equal(calls.filter(row => row.key === retryKey).length, 2);
+    assert.equal(accepted.size, 2);
+    const reviewKey = prefix + "/email-review";
+    await prisma.emailDelivery.create({ data: { key: reviewKey, payload, firstAttemptAt: new Date(Date.now() - 24 * 3600000) } });
+    assert.equal(await deliverEmail(reviewKey, payload, complete), "review");
+    assert.equal(calls.some(row => row.key === reviewKey), false);
+    await request("/api/admin/email-deliveries", "PATCH", { key: reviewKey, evidence: "Verified provider message reference fixture", confirmedDelivered: true });
+    assert.equal((await prisma.emailDelivery.findUniqueOrThrow({ where: { key: reviewKey } })).status, "SENT");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousKey;
+  }
+});
+
+test("the production invoice endpoint embeds Arabic text in a downloadable PDF", async () => {
+  const target = await order();
+  const productName = "\u0647\u0627\u062a\u0641 \u0627\u062e\u062a\u0628\u0627\u0631";
+  await prisma.orderItem.update({ where: { id: target.items[0].id }, data: { productName } });
+  const response = await fetch(`${origin}/api/orders/${target.id}/invoice`, { headers: { cookie }, signal: AbortSignal.timeout(30000) });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/pdf/);
+  assert.match(response.headers.get("content-disposition") ?? "", /attachment/);
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const task = getDocument({ data: new Uint8Array(await response.arrayBuffer()) });
+  try {
+    const pdf = await task.promise;
+    const content = await (await pdf.getPage(1)).getTextContent();
+    const text = content.items.map(item => "str" in item ? item.str : "").join("");
+    assert.ok(text.includes(productName));
+    assert.ok(text.includes("TOTAL: EGP 100.00"));
+  } finally { await task.destroy(); }
+});
+
+test("email cron queues run safely without email credentials and require scheduler authentication", async () => {
+  for (const path of ["/api/cron/notification-emails", "/api/cron/abandoned-carts"]) {
+    const denied = await fetch(origin + path);
+    assert.equal(denied.status, 401);
+    const response = await fetch(origin + path, { headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(30000) });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).emailEnabled, false);
+  }
 });

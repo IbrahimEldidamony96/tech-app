@@ -10,5 +10,7 @@ if (existsSync(".env")) {
   if (primary && endpoint(primary) === endpoint(target)) throw new Error("Database tests must run on a separate endpoint from the application's configured database.");
 }
 const env = { ...process.env, NODE_ENV: "test", DATABASE_URL: target, DATABASE_URL_UNPOOLED: target };
+const migrated = spawnSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "deploy"], { stdio: "inherit", env });
+if (migrated.status !== 0) process.exit(migrated.status ?? 1);
 const result = spawnSync(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", ...process.argv.slice(2), "tests/database.integration.ts"], { stdio: "inherit", env });
 process.exitCode = result.status ?? 1;

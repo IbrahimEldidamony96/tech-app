@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { requestFailureMessage } from "@/lib/request-error";
 import Link from "next/link";
 import Image from "next/image";
 import { useLocale, useTranslations } from "next-intl";
@@ -21,7 +22,9 @@ type Row = {
 
 function read() {
   try {
-    return JSON.parse(localStorage.getItem("guestCart") ?? "[]") as { variantId: string; quantity: number }[];
+    const value: unknown = JSON.parse(localStorage.getItem("guestCart") ?? "[]");
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is { variantId: string; quantity: number } => !!item && typeof item.variantId === "string" && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 10).slice(0, 100);
   } catch {
     return [];
   }
@@ -33,30 +36,46 @@ export function GuestCart() {
   const store = useTranslations("Storefront");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const pending = useRef<AbortController | null>(null);
 
-  async function load() {
-    const items = read();
-    if (!items.length) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    const response = await fetch("/api/guest-cart/resolve", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ items }),
-    });
-    const body = await response.json();
-    setRows(body.data ?? []);
-    setLoading(false);
-  }
+  const load = useCallback(async () => {
+    pending.current?.abort();
+    const controller = new AbortController();
+    pending.current = controller;
+    setLoading(true);
+    setError("");
+    try {
+      const items = read();
+      if (!items.length) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+      const response = await fetch("/api/guest-cart/resolve", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ items }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error();
+      const body = await response.json();
+      if (!controller.signal.aborted) setRows(body.data ?? []);
+    } catch { if (!controller.signal.aborted) setError(requestFailureMessage()); }
+    finally { if (!controller.signal.aborted) setLoading(false); }
+  }, []);
 
-  useEffect(() => { void Promise.resolve().then(load); }, []);
+  useEffect(() => {
+    void Promise.resolve().then(load);
+    return () => pending.current?.abort();
+  }, [load]);
 
   function save(next: { variantId: string; quantity: number }[]) {
-    localStorage.setItem("guestCart", JSON.stringify(next));
-    window.dispatchEvent(new Event("guest-cart-changed"));
-    void load();
+    try {
+      localStorage.setItem("guestCart", JSON.stringify(next));
+      window.dispatchEvent(new Event("guest-cart-changed"));
+      void load();
+    } catch { setError(requestFailureMessage()); }
   }
 
   const subtotal = useMemo(() => rows.reduce((sum, row) => sum + (row.price ?? 0) * row.quantity, 0), [rows]);
@@ -64,6 +83,8 @@ export function GuestCart() {
   if (loading) {
     return <div role="status" className="surface-card mt-9 flex min-h-48 items-center justify-center gap-3 text-sm text-steel"><span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-line border-t-accent" />{store("loading")}</div>;
   }
+
+  if (error) return <div role="alert" className="surface-card mt-9 text-sm text-alert">{error} <button type="button" onClick={() => void load()} className="underline">{t("refreshCart")}</button></div>;
 
   if (!rows.length) {
     return (

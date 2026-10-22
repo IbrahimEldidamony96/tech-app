@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -19,45 +20,58 @@ export function AddressManager({
   const [error, setError] = useState("");
 
   async function refresh() {
-    const res = await fetch("/api/addresses");
-    const body = await res.json().catch(() => ({}));
-    if (res.ok) setAddresses(body.data ?? []);
-    setEditingId(null);
-    setAdding(false);
+    try {
+      const res = await fetch("/api/addresses");
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error();
+      setAddresses(body.data ?? []);
+      setEditingId(null);
+      setAdding(false);
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   async function handleDelete(id: string) {
-    setDeletingId(id);
-    setError("");
+    try {
+      setDeletingId(id);
+      setError("");
 
-    const res = await fetch(`/api/addresses/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("couldNotDelete"));
+      const res = await fetch(`/api/addresses/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("couldNotDelete"));
+        setDeletingId(null);
+        return;
+      }
+
+      await refresh();
       setDeletingId(null);
-      return;
-    }
 
-    await refresh();
-    setDeletingId(null);
+    } catch { setError(requestFailureMessage()); }
+    finally { setDeletingId(null); }
   }
 
   async function handleSetDefault(address: Address) {
-    setError("");
+    try {
+      setError("");
 
-    const res = await fetch(`/api/addresses/${address.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...address, isDefault: true }),
-    });
+      const res = await fetch(`/api/addresses/${address.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...address, isDefault: true }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("couldNotSetDefault"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("couldNotSetDefault"));
+        return;
+      }
 
-    await refresh();
+      await refresh();
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   return (

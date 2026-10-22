@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -9,17 +10,21 @@ export function InventoryAdjustForm({ variantId, sku }: { variantId: string; sku
   const [error, setError] = useState("");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const delta = Number(form.get("delta"));
-    const note = String(form.get("note") ?? "");
-    setBusy(true); setError("");
-    const res = await fetch("/api/admin/inventory/adjust", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ variantId, delta, note }) });
-    const body = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (!res.ok) return setError(body.error ?? "Could not update stock");
-    event.currentTarget.reset();
-    router.refresh();
+    try {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const delta = Number(form.get("delta"));
+      const note = String(form.get("note") ?? "");
+      setBusy(true); setError("");
+      const res = await fetch("/api/admin/inventory/adjust", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ variantId, delta, note }) });
+      const body = await res.json().catch(() => ({}));
+      setBusy(false);
+      if (!res.ok) return setError(body.error ?? "Could not update stock");
+      event.currentTarget.reset();
+      router.refresh();
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setBusy(false); }
   }
 
   return (

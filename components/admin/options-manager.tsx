@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -31,24 +32,28 @@ export function OptionsManager({
   const [error, setError] = useState("");
 
   async function addOption(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
+    try {
+      e.preventDefault();
+      setError("");
 
-    const res = await fetch(`/api/products/${productId}/options`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newOption),
-    });
+      const res = await fetch(`/api/products/${productId}/options`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newOption),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("addOptionFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("addOptionFailed"));
+        return;
+      }
 
-    const body = await res.json();
-    setOptions((prev) => [...prev, { ...body.data, values: [] }]);
-    setNewOption(emptyOption);
+      const body = await res.json();
+      setOptions((prev) => [...prev, { ...body.data, values: [] }]);
+      setNewOption(emptyOption);
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   // بيتنادى onBlur — يعني بيتحفظ لما تسيب الخانة، مش مع كل حرف
@@ -57,22 +62,26 @@ export function OptionsManager({
     field: "nameEn" | "nameAr",
     value: string,
   ) {
-    setError("");
-    const res = await fetch(`/api/products/${productId}/options/${optionId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: value }),
-    });
+    try {
+      setError("");
+      const res = await fetch(`/api/products/${productId}/options/${optionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("renameOptionFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("renameOptionFailed"));
+        return;
+      }
 
-    setOptions((prev) =>
-      prev.map((o) => (o.id === optionId ? { ...o, [field]: value } : o)),
-    );
+      setOptions((prev) =>
+        prev.map((o) => (o.id === optionId ? { ...o, [field]: value } : o)),
+      );
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   async function renameValue(
@@ -81,66 +90,74 @@ export function OptionsManager({
     field: "valueEn" | "valueAr",
     value: string,
   ) {
-    setError("");
-    const res = await fetch(
-      `/api/products/${productId}/options/${optionId}/values/${valueId}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      },
-    );
+    try {
+      setError("");
+      const res = await fetch(
+        `/api/products/${productId}/options/${optionId}/values/${valueId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [field]: value }),
+        },
+      );
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("renameValueFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("renameValueFailed"));
+        return;
+      }
 
-    setOptions((prev) =>
-      prev.map((o) =>
-        o.id === optionId
-          ? {
-              ...o,
-              values: o.values.map((v) =>
-                v.id === valueId ? { ...v, [field]: value } : v,
-              ),
-            }
-          : o,
-      ),
-    );
+      setOptions((prev) =>
+        prev.map((o) =>
+          o.id === optionId
+            ? {
+                ...o,
+                values: o.values.map((v) =>
+                  v.id === valueId ? { ...v, [field]: value } : v,
+                ),
+              }
+            : o,
+        ),
+      );
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   async function addValue(optionId: string) {
-    setError("");
-    const draft = newValues[optionId] ?? emptyValue;
-    if (!draft.valueEn || !draft.valueAr) {
-      setError(t("fillBothValues"));
-      return;
-    }
+    try {
+      setError("");
+      const draft = newValues[optionId] ?? emptyValue;
+      if (!draft.valueEn || !draft.valueAr) {
+        setError(t("fillBothValues"));
+        return;
+      }
 
-    const res = await fetch(
-      `/api/products/${productId}/options/${optionId}/values`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
-      },
-    );
+      const res = await fetch(
+        `/api/products/${productId}/options/${optionId}/values`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(draft),
+        },
+      );
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("addValueFailed"));
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("addValueFailed"));
+        return;
+      }
 
-    const body = await res.json();
-    setOptions((prev) =>
-      prev.map((o) =>
-        o.id === optionId ? { ...o, values: [...o.values, body.data] } : o,
-      ),
-    );
-    setNewValues((prev) => ({ ...prev, [optionId]: emptyValue }));
+      const body = await res.json();
+      setOptions((prev) =>
+        prev.map((o) =>
+          o.id === optionId ? { ...o, values: [...o.values, body.data] } : o,
+        ),
+      );
+      setNewValues((prev) => ({ ...prev, [optionId]: emptyValue }));
+
+    } catch { setError(requestFailureMessage()); }
+
   }
 
   return (

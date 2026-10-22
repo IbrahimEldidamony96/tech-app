@@ -5,6 +5,10 @@ type Tx = Prisma.TransactionClient;
 export const LOYALTY_EGP_PER_POINT = 1;
 export const LOYALTY_EARN_EGP_STEP = 10;
 
+export class InsufficientLoyaltyPointsError extends Error {
+  constructor() { super("INSUFFICIENT_LOYALTY_POINTS"); }
+}
+
 export async function changeLoyaltyPoints(
   tx: Tx,
   input: {
@@ -33,7 +37,7 @@ export async function changeLoyaltyPoints(
       where: { id: input.userId, loyaltyPoints: { gte: Math.abs(input.points) } },
       data: { loyaltyPoints: { increment: input.points } },
     });
-    if (claimed.count !== 1) throw new Error("INSUFFICIENT_LOYALTY_POINTS");
+    if (claimed.count !== 1) throw new InsufficientLoyaltyPointsError();
   } else {
     await tx.user.update({
       where: { id: input.userId },

@@ -10,10 +10,14 @@ const resend = process.env.RESEND_API_KEY
 const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL ?? "Tech Store <onboarding@resend.dev>";
 
+export const emailSender = () => FROM_EMAIL;
+
 export async function sendEmail(options: {
   to: string;
   subject: string;
   html: string;
+  from?: string;
+  idempotencyKey?: string;
 }): Promise<{ devMode: boolean }> {
   if (!resend) {
     if (process.env.NODE_ENV === "production") {
@@ -27,11 +31,11 @@ export async function sendEmail(options: {
   }
 
   const result = await resend.emails.send({
-    from: FROM_EMAIL,
+    from: options.from ?? FROM_EMAIL,
     to: options.to,
     subject: options.subject,
     html: options.html,
-  });
+  }, options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : undefined);
 
   if (result.error) {
     console.error("Resend send failed", result.error);

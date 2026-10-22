@@ -64,7 +64,7 @@ export default async function CartPage() {
           </Link>
         </div>
       ) : (
-        <CartItems initialItems={items} />
+        <CartItems key={JSON.stringify(items)} initialItems={items} />
       )}
     </div>
   );

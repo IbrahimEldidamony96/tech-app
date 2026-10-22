@@ -4,14 +4,15 @@ import { cheapestVariantIds } from "@/lib/queries/effective-variants";
 
 export async function getWishlistForUser(userId: string) {
   const wishlist = await getOrCreateWishlist(userId);
-  const productIds = await prisma.wishlistItem.findMany({ where: { wishlistId: wishlist.id }, select: { productId: true } });
+  const productIds = await prisma.wishlistItem.findMany({ where: { wishlistId: wishlist.id, product: { isActive: true, deletedAt: null } }, select: { productId: true } });
   const chosen = await cheapestVariantIds(productIds.map(row => row.productId));
 
   return prisma.wishlistItem.findMany({
-    where: { wishlistId: wishlist.id },
+    where: { wishlistId: wishlist.id, product: { isActive: true, deletedAt: null } },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
+      createdAt: true,
       product: {
         select: {
           id: true,

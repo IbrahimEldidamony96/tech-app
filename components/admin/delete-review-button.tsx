@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -15,22 +16,26 @@ export function DeleteReviewButton({ reviewId }: { reviewId: string }) {
   const [error, setError] = useState("");
 
   async function handleDelete() {
-    const confirmed = window.confirm(t("confirmDelete"));
-    if (!confirmed) return;
+    try {
+      const confirmed = window.confirm(t("confirmDelete"));
+      if (!confirmed) return;
 
-    setDeleting(true);
-    setError("");
+      setDeleting(true);
+      setError("");
 
-    const res = await fetch(`/api/reviews/${reviewId}`, { method: "DELETE" });
+      const res = await fetch(`/api/reviews/${reviewId}`, { method: "DELETE" });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? t("deleteFailed"));
-      setDeleting(false);
-      return;
-    }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? t("deleteFailed"));
+        setDeleting(false);
+        return;
+      }
 
-    router.refresh();
+      router.refresh();
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setDeleting(false); }
   }
 
   return (

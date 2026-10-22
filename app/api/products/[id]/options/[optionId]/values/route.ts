@@ -10,7 +10,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const { error } = await requirePermission("catalog:write");
   if (error) return error;
 
-  const { optionId } = await params;
+  const { id: productId, optionId } = await params;
 
   let body: unknown;
   try {
@@ -26,6 +26,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       { status: 400 },
     );
   }
+
+  const option = await prisma.productOption.findFirst({ where: { id: optionId, productId }, select: { id: true } });
+  if (!option) return NextResponse.json({ error: "Option not found for this product" }, { status: 404 });
 
   try {
     const value = await prisma.productOptionValue.create({

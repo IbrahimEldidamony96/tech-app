@@ -1,4 +1,5 @@
 "use client";
+import { requestFailureMessage } from "@/lib/request-error";
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -14,41 +15,45 @@ export function PasswordForm({ hasPassword }: { hasPassword: boolean }) {
   const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setSuccess(false);
+    try {
+      e.preventDefault();
+      setError("");
+      setSuccess(false);
 
-    if (newPassword !== confirmPassword) {
-      setError(t("passwordMismatch"));
-      return;
-    }
+      if (newPassword !== confirmPassword) {
+        setError(t("passwordMismatch"));
+        return;
+      }
 
-    setSubmitting(true);
+      setSubmitting(true);
 
-    const res = await fetch("/api/account/password", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        currentPassword: currentPassword || undefined,
-        newPassword,
-      }),
-    });
+      const res = await fetch("/api/account/password", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: currentPassword || undefined,
+          newPassword,
+        }),
+      });
 
-    const body = await res.json().catch(() => ({}));
+      const body = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setError(body.error ?? t("passwordUpdateFailed"));
-      setSubmitting(false);
-      return;
-    }
+      if (!res.ok) {
+        setError(body.error ?? t("passwordUpdateFailed"));
+        setSubmitting(false);
+        return;
+      }
 
-    // This password change atomically revoked all previous JWT sessions,
-    // including the current one. Clear its browser cookie and sign in again.
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setSuccess(true);
-    await signOut({ redirectTo: "/login?reason=password-changed" });
+      // This password change atomically revoked all previous JWT sessions,
+      // including the current one. Clear its browser cookie and sign in again.
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setSuccess(true);
+      await signOut({ redirectTo: "/login?reason=password-changed" });
+
+    } catch { setError(requestFailureMessage()); }
+    finally { setSubmitting(false); }
   }
 
   return (
